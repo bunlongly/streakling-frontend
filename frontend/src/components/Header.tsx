@@ -1,47 +1,58 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  ClerkLoaded,
-  ClerkLoading,
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  UserButton
-} from '@clerk/nextjs';
+import { usePathname } from 'next/navigation';
+import { UserButton, useAuth } from '@clerk/nextjs';
+
+const navItems = [
+  { href: '/', label: 'Home' },
+  { href: '/profile/cards', label: 'My Cards' }, // list
+  { href: '/profile/cards/create', label: 'Create Card' } // create
+];
 
 export default function Header() {
-  return (
-    <header className='w-full max-w-6xl mx-auto flex items-center justify-between py-4 px-4'>
-      <Link href='/' className='font-bold'>
-        Streakling
-      </Link>
+  const pathname = usePathname();
+  const { isSignedIn } = useAuth();
 
-      <nav className='flex items-center gap-3'>
-        <Link href='/dashboard' className='btn-outline'>
-          Dashboard
+  return (
+    <header className='w-full border-b border-white/10 bg-surface/70 backdrop-blur sticky top-0 z-40'>
+      <nav className='max-w-6xl mx-auto flex items-center justify-between px-6 h-14'>
+        <Link
+          href='/'
+          className='font-bold text-lg text-[color:var(--color-primary)]'
+        >
+          Streakling
         </Link>
 
-        {/* Avoid SSR ↔ client mismatch by waiting for Clerk to be ready */}
-        <ClerkLoading>
-          {/* tiny skeleton to keep DOM stable */}
-          <div
-            className='w-24 h-9 rounded card-surface animate-pulse'
-            aria-hidden
-          />
-        </ClerkLoading>
+        <ul className='flex items-center gap-6 text-sm'>
+          {navItems.map(item => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={`hover:text-[color:var(--color-accent)] transition ${
+                  pathname === item.href
+                    ? 'text-[color:var(--color-accent)] font-medium'
+                    : ''
+                }`}
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
 
-        <ClerkLoaded>
-          <SignedOut>
-            <SignInButton mode='modal'>
-              <button className='btn'>Sign in</button>
-            </SignInButton>
-          </SignedOut>
-
-          <SignedIn>
+        <div className='flex items-center gap-4'>
+          {isSignedIn ? (
             <UserButton afterSignOutUrl='/' />
-          </SignedIn>
-        </ClerkLoaded>
+          ) : (
+            <Link
+              href='/sign-in'
+              className='px-3 py-1.5 rounded-md bg-[color:var(--color-primary)] text-white text-sm font-medium hover:opacity-90'
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
       </nav>
     </header>
   );

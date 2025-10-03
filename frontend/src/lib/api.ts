@@ -1,0 +1,151 @@
+// src/lib/api.ts
+// Reusable HTTP client + feature APIs + type re-exports
+
+import type {
+  DigitalCard,
+  UpsertCardInput,
+  PublishStatus,
+  CardStatus
+} from '@/types/digitalCard';
+
+export const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL;
+if (!API_BASE) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
+
+export type ApiSuccess<T> = { status: 'success'; message: string; data: T };
+export type ApiFail = {
+  status: 'fail' | 'error';
+  message: string;
+  errors?: unknown;
+};
+
+export class HttpError<T = unknown> extends Error {
+  status: number;
+  data?: T;
+  constructor(status: number, message: string, data?: T) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
+
+type Query = Record<string, string | number | boolean | null | undefined>;
+type RequestInitExtra = Omit<RequestInit, 'body' | 'method' | 'headers'> & {
+  headers?: Record<string, string>;
+  query?: Query;
+  rawBody?: BodyInit; // for FormData/Blob
+};
+
+function withQuery(url: string, query?: Query) {
+  if (!query) return url;
+  const u = new URL(url);
+  for (const [k, v] of Object.entries(query)) {
+    if (v == null) continue;
+    u.searchParams.set(k, String(v));
+  }
+  return u.toString();
+}
+
+async function parseResponse<T>(res: Response): Promise<T> {
+  const ctype = res.headers.get('content-type') || '';
+  if (ctype.includes('application/json')) {
+    return res.json();
+  }
+
+  return (await res.text()) as T;
+}
+
+class HttpClient {
+  constructor(private base: string) {}
+
+  private async request<T>(
+    path: string,
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    init?: RequestInitExtra,
+    body?: unknown
+  ): Promise<T> {
+    const url = withQuery(`${this.base}${path}`, init?.query);
+    const isJsonBody = body !== undefined && init?.rawBody === undefined;
+
+    const res = await fetch(url, {
+      method,
+      credentials: 'include', // include cookies
+      ...init,
+      headers: {
+        ...(isJsonBody ? { 'Content-Type': 'application/json' } : {}),
+        ...(init?.headers || {})
+      },
+      body: isJsonBody ? JSON.stringify(body) : init?.rawBody ?? undefined
+    });
+
+    const parsed = await parseResponse<unknown>(res);
+
+    if (!res.ok) {
+      const hasMsg =
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        'message' in (parsed as any);
+      const message = hasMsg
+        ? String((parsed as any).message)
+        : `${res.status} ${res.statusText}`;
+      throw new HttpError(res.status, message, parsed);
+    }
+    return parsed as T;
+  }
+
+  get<T>(path: string, init?: RequestInitExtra) {
+    return this.request<T>(path, 'GET', init);
+  }
+  post<T>(path: string, body?: unknown, init?: RequestInitExtra) {
+    return this.request<T>(path, 'POST', init, body);
+  }
+  patch<T>(path: string, body?: unknown, init?: RequestInitExtra) {
+    return this.request<T>(path, 'PATCH', init, body);
+  }
+  delete<T>(path: string, init?: RequestInitExtra) {
+    return this.request<T>(path, 'DELETE', init);
+  }
+}
+
+export const http = new HttpClient(API_BASE);
+
+/* ================== Feature APIs ================== */
+
+// ---- Session (Clerk token -> backend cookie) ----
+export const apiSession = {
+  login: (
+    token: string,
+    sensitive?: {
+      phone?: string | null;
+      religion?: string | null;
+      country?: string | null;
+    }
+  ) =>
+    http.post<ApiSuccess<{ userId: string }>>('/api/session/login', {
+      token,
+      sensitive
+    }),
+  logout: () => http.post<void>('/api/session/logout')
+};
+
+// ---- Digital Name Cards (multi-card, slugged, publishable) ----
+export const apiCard = {
+  publicGetBySlug: (slug: string) =>
+    http.get<ApiSuccess<DigitalCard>>(`/api/digital-name-card/slug/${encodeURIComponent(slug)}`),
+
+  listMine: () => http.get<ApiSuccess<DigitalCard[]>>('/api/me/digital-name-cards'),
+
+  create: (payload: UpsertCardInput) =>
+    http.post<ApiSuccess<DigitalCard>>('/api/digital-name-cards', payload),
+
+  updateById: (id: string, payload: Partial<UpsertCardInput>) =>
+    http.patch<ApiSuccess<DigitalCard>>(`/api/digital-name-cards/${id}`, payload),
+};
+
+// Convenience grouped export
+export const api = {
+  session: apiSession,
+  card: apiCard
+};
+
+// Re-export types for convenience (so old imports still work)
+export type { DigitalCard, UpsertCardInput, PublishStatus, CardStatus };

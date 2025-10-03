@@ -1,19 +1,20 @@
+// src/app/dashboard/page.tsx
 'use client';
 
 import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
-import { backendLogout } from '@/lib/backend';
+import { api } from '@/lib/api';
 import { useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  useBackendSessionSync(); // sync cookie with backend
+  useBackendSessionSync();
   const router = useRouter();
   const { signOut } = useAuth();
 
   const handleLogout = async () => {
-    await backendLogout();
+    await api.session.logout();
     await signOut();
     router.push('/');
   };
