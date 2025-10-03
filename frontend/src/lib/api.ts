@@ -35,6 +35,7 @@ type RequestInitExtra = Omit<RequestInit, 'body' | 'method' | 'headers'> & {
   rawBody?: BodyInit; // for FormData/Blob
 };
 
+/** Query helper */
 function withQuery(url: string, query?: Query) {
   if (!query) return url;
   const u = new URL(url);
@@ -45,13 +46,18 @@ function withQuery(url: string, query?: Query) {
   return u.toString();
 }
 
-async function parseResponse<T>(res: Response): Promise<T> {
+/** Runtime type guard for error payloads */
+function hasMessage(x: unknown): x is { message: unknown } {
+  return typeof x === 'object' && x !== null && 'message' in x;
+}
+
+/** Parse JSON or text without `any` */
+async function parseResponse(res: Response): Promise<unknown> {
   const ctype = res.headers.get('content-type') || '';
   if (ctype.includes('application/json')) {
-    return res.json();
+    return res.json() as Promise<unknown>;
   }
-
-  return (await res.text()) as T;
+  return res.text(); // string
 }
 
 class HttpClient {
@@ -77,18 +83,17 @@ class HttpClient {
       body: isJsonBody ? JSON.stringify(body) : init?.rawBody ?? undefined
     });
 
-    const parsed = await parseResponse<unknown>(res);
+    const parsed = await parseResponse(res);
 
     if (!res.ok) {
-      const hasMsg =
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'message' in (parsed as any);
-      const message = hasMsg
-        ? String((parsed as any).message)
-        : `${res.status} ${res.statusText}`;
+      const message =
+        hasMessage(parsed) && typeof parsed.message === 'string'
+          ? parsed.message
+          : `${res.status} ${res.statusText}`;
       throw new HttpError(res.status, message, parsed);
     }
+
+    // Assume the caller provides the correct T; we avoid `any`
     return parsed as T;
   }
 
@@ -130,22 +135,49 @@ export const apiSession = {
 // ---- Digital Name Cards (multi-card, slugged, publishable) ----
 export const apiCard = {
   publicGetBySlug: (slug: string) =>
-    http.get<ApiSuccess<DigitalCard>>(`/api/digital-name-card/slug/${encodeURIComponent(slug)}`),
+    http.get<ApiSuccess<DigitalCard>>(
+      `/api/digital-name-card/slug/${encodeURIComponent(slug)}`
+    ),
 
-  listMine: () => http.get<ApiSuccess<DigitalCard[]>>('/api/me/digital-name-cards'),
+  listMine: () =>
+    http.get<ApiSuccess<DigitalCard[]>>('/api/me/digital-name-cards'),
 
   create: (payload: UpsertCardInput) =>
     http.post<ApiSuccess<DigitalCard>>('/api/digital-name-cards', payload),
 
   updateById: (id: string, payload: Partial<UpsertCardInput>) =>
-    http.patch<ApiSuccess<DigitalCard>>(`/api/digital-name-cards/${id}`, payload),
+    http.patch<ApiSuccess<DigitalCard>>(
+      `/api/digital-name-cards/${id}`,
+      payload
+    )
 };
 
-// Convenience grouped export
+// ---- Upload signing ----
+export type SignUploadInput = {
+  category: 'digitalcard' | 'portfolio' | 'profile';
+  purpose?: string; // e.g. 'avatar' | 'banner'
+  ext: string; // 'png' | 'jpg' | 'webp'
+  contentType: string; // 'image/png', ...
+  sizeBytes: number;
+};
+
+export type SignUploadResponse = {
+  key: string;
+  uploadUrl: string;
+  expiresInSec: number;
+};
+
+export const apiUploads = {
+  sign: (payload: SignUploadInput) =>
+    http.post<ApiSuccess<SignUploadResponse>>('/api/uploads/sign', payload)
+};
+
+// Grouped export
 export const api = {
   session: apiSession,
-  card: apiCard
+  card: apiCard,
+  uploads: apiUploads
 };
 
-// Re-export types for convenience (so old imports still work)
+// Re-export types for convenience
 export type { DigitalCard, UpsertCardInput, PublishStatus, CardStatus };

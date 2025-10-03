@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import ImageUploader from '@/components/uploader/ImageUploader';
 import { api } from '@/lib/api';
 import {
   digitalCardSchema,
@@ -10,7 +11,7 @@ import {
 } from '@/schemas/digitalCard';
 
 type Props = {
-  id?: string; // if provided -> update, else create
+  id?: string; // if provided -> update; else create
   initial?: Partial<DigitalCardFormValues>;
 };
 
@@ -21,6 +22,8 @@ export default function ProfileCardForm({ initial, id }: Props) {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors }
   } = useForm<DigitalCardFormValues>({
     resolver: zodResolver(digitalCardSchema),
@@ -36,6 +39,11 @@ export default function ProfileCardForm({ initial, id }: Props) {
       ...initial
     }
   });
+
+  // For optional remote preview (if you set NEXT_PUBLIC_S3_PUBLIC_BASE)
+  const avatarKey = watch('avatarKey') || null;
+  const bannerKey = watch('bannerKey') || null;
+  const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE;
 
   const onSubmit = async (values: DigitalCardFormValues) => {
     setServerMessage(null);
@@ -54,7 +62,35 @@ export default function ProfileCardForm({ initial, id }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className='grid gap-4'>
+    <form onSubmit={handleSubmit(onSubmit)} className='grid gap-6'>
+      {/* Images (upload first -> get S3 keys) */}
+      <div className='grid md:grid-cols-2 gap-6'>
+        <ImageUploader
+          label='Avatar'
+          category='digitalcard'
+          purpose='avatar'
+          existingKey={avatarKey}
+          previewUrl={
+            avatarKey && PUBLIC_BASE ? `${PUBLIC_BASE}/${avatarKey}` : null
+          }
+          onUploaded={key =>
+            setValue('avatarKey', key, { shouldDirty: true, shouldTouch: true })
+          }
+        />
+        <ImageUploader
+          label='Banner'
+          category='digitalcard'
+          purpose='banner'
+          existingKey={bannerKey}
+          previewUrl={
+            bannerKey && PUBLIC_BASE ? `${PUBLIC_BASE}/${bannerKey}` : null
+          }
+          onUploaded={key =>
+            setValue('bannerKey', key, { shouldDirty: true, shouldTouch: true })
+          }
+        />
+      </div>
+
       {/* Slug */}
       <div className='grid gap-2'>
         <label htmlFor='slug'>Slug</label>
@@ -67,7 +103,8 @@ export default function ProfileCardForm({ initial, id }: Props) {
           <p className='text-red-400 text-sm'>{errors.slug.message}</p>
         )}
         <p className='muted text-xs'>
-          Lowercase, numbers, hyphens (e.g. <code>my-card</code>).
+          Lowercase, numbers, hyphens (e.g. <code>my-card</code>). Your public
+          URL will look like: <code>/your-username/{`{slug}`}/digitalcard</code>
         </p>
       </div>
 
