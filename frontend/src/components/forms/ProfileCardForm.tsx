@@ -1,19 +1,36 @@
+// src/components/digital-card/ProfileCardForm.tsx
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import ImageUploader from '@/components/uploader/ImageUploader';
 import { api } from '@/lib/api';
 import {
   digitalCardSchema,
-  type DigitalCardFormValues
+  type DigitalCardFormValues,
+  SOCIAL_PLATFORMS
 } from '@/schemas/digitalCard';
 
 type Props = {
   id?: string; // if provided -> update; else create
   initial?: Partial<DigitalCardFormValues>;
 };
+
+/**
+ * ---- Temporary adapter to satisfy your API types ----
+ * Your error shows api.UpsertCardInput.PublishStatus does NOT include "PRIVATE".
+ * Until you update the API types to include "PRIVATE", we map "PRIVATE" -> "DRAFT".
+ */
+function adaptToUpsert(values: DigitalCardFormValues) {
+  const publishStatusForApi =
+    values.publishStatus === 'PRIVATE' ? 'DRAFT' : values.publishStatus;
+
+  return {
+    ...values,
+    publishStatus: publishStatusForApi
+  };
+}
 
 export default function ProfileCardForm({ initial, id }: Props) {
   const [serverMessage, setServerMessage] = useState<string | null>(null);
@@ -24,34 +41,69 @@ export default function ProfileCardForm({ initial, id }: Props) {
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors }
   } = useForm<DigitalCardFormValues>({
     resolver: zodResolver(digitalCardSchema),
     defaultValues: {
+      // REQUIRED by schema
       slug: '',
+      firstName: '',
+      lastName: '',
+      appName: '',
+      role: '',
       status: 'WORKING',
-      publishStatus: 'DRAFT',
+      publishStatus: 'DRAFT', // schema: 'DRAFT' | 'PRIVATE' | 'PUBLISHED'
+      shortBio: '',
+
+      // required booleans
       showPhone: false,
       showReligion: false,
       showCompany: true,
       showUniversity: true,
       showCountry: true,
+
+      // optional strings
+      company: '',
+      university: '',
+      country: '',
+      religion: '',
+      phone: '',
+
+      // optional media
+      avatarKey: undefined,
+      bannerKey: undefined,
+
+      // socials array (required by schema; can be empty)
+      socials: [],
+
+      // let incoming initial override
       ...initial
     }
   });
 
-  // For optional remote preview (if you set NEXT_PUBLIC_S3_PUBLIC_BASE)
+  // Socials field array
+  const { fields, append, remove, swap } = useFieldArray({
+    control,
+    name: 'socials'
+  });
+
+  // Optional remote preview (if NEXT_PUBLIC_S3_PUBLIC_BASE is set)
   const avatarKey = watch('avatarKey') || null;
   const bannerKey = watch('bannerKey') || null;
   const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE;
 
-  const onSubmit = async (values: DigitalCardFormValues) => {
+  const onSubmit: SubmitHandler<DigitalCardFormValues> = async values => {
     setServerMessage(null);
     setLoading(true);
     try {
+      // TEMP adapter to satisfy your current API type (no "PRIVATE")
+      const payload = adaptToUpsert(values);
+
       const res = id
-        ? await api.card.updateById(id, values)
-        : await api.card.create(values);
+        ? await api.card.updateById(id, payload as any)
+        : await api.card.create(payload as any);
+
       setServerMessage(res.message || 'Saved');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to save';
@@ -63,7 +115,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className='grid gap-6'>
-      {/* Images (upload first -> get S3 keys) */}
+      {/* Images */}
       <div className='grid md:grid-cols-2 gap-6'>
         <ImageUploader
           label='Avatar'
@@ -185,6 +237,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
             {...register('publishStatus')}
           >
             <option value='DRAFT'>Draft</option>
+            <option value='PRIVATE'>Private</option>
             <option value='PUBLISHED'>Published</option>
           </select>
         </div>
@@ -192,7 +245,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
 
       {/* Short bio */}
       <div className='grid gap-2'>
-        <label htmlFor='shortBio'>Short bio (≤200)</label>
+        <label htmlFor='shortBio'>Short bio (≤300)</label>
         <textarea
           id='shortBio'
           rows={3}
@@ -279,6 +332,114 @@ export default function ProfileCardForm({ initial, id }: Props) {
           You can publish without showing sensitive details. Owners always see
           all values.
         </p>
+      </div>
+
+      {/* Social Accounts */}
+      <div className='rounded-lg border border-white/10 p-4'>
+        <div className='flex items-center justify-between mb-3'>
+          <div className='font-medium'>Social accounts</div>
+          <button
+            type='button'
+            className='btn-secondary'
+            onClick={() =>
+              append({
+                platform: 'GITHUB',
+                handle: '',
+                url: '',
+                isPublic: true,
+                sortOrder: fields.length
+              })
+            }
+          >
+            + Add social
+          </button>
+        </div>
+
+        <div className='grid gap-3'>
+          {fields.map((field, idx) => (
+            <div
+              key={field.id}
+              className='grid md:grid-cols-12 gap-2 items-end'
+            >
+              <div className='md:col-span-2 grid gap-1'>
+                <label className='text-xs'>Platform</label>
+                <select
+                  className='card-surface px-2 py-2'
+                  {...register(`socials.${idx}.platform` as const)}
+                >
+                  {SOCIAL_PLATFORMS.map(p => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className='md:col-span-2 grid gap-1'>
+                <label className='text-xs'>Handle</label>
+                <input
+                  className='card-surface px-2 py-2'
+                  {...register(`socials.${idx}.handle` as const)}
+                />
+              </div>
+              <div className='md:col-span-5 grid gap-1'>
+                <label className='text-xs'>URL</label>
+                <input
+                  className='card-surface px-2 py-2'
+                  {...register(`socials.${idx}.url` as const)}
+                />
+              </div>
+              <div className='md:col-span-1 grid gap-1'>
+                <label className='text-xs'>Order</label>
+                <input
+                  type='number'
+                  className='card-surface px-2 py-2'
+                  {...register(`socials.${idx}.sortOrder` as const, {
+                    valueAsNumber: true
+                  })}
+                />
+              </div>
+              <div className='md:col-span-1 flex items-center gap-2'>
+                <input
+                  type='checkbox'
+                  {...register(`socials.${idx}.isPublic` as const)}
+                />
+                <span className='text-sm'>Public</span>
+              </div>
+              <div className='md:col-span-1 flex gap-2 justify-end'>
+                <button
+                  type='button'
+                  className='btn-ghost'
+                  onClick={() => remove(idx)}
+                >
+                  Remove
+                </button>
+                {idx > 0 && (
+                  <button
+                    type='button'
+                    className='btn-ghost'
+                    onClick={() => swap(idx, idx - 1)}
+                  >
+                    ↑
+                  </button>
+                )}
+                {idx < fields.length - 1 && (
+                  <button
+                    type='button'
+                    className='btn-ghost'
+                    onClick={() => swap(idx, idx + 1)}
+                  >
+                    ↓
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {errors.socials && (
+            <p className='text-red-400 text-sm'>
+              {(errors.socials as any)?.message}
+            </p>
+          )}
+        </div>
       </div>
 
       <button disabled={loading} className='btn mt-2'>

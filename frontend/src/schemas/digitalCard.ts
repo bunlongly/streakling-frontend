@@ -1,43 +1,62 @@
+// src/schemas/digitalCard.ts
 import { z } from 'zod';
 
+export const SOCIAL_PLATFORMS = [
+  'TWITTER',
+  'INSTAGRAM',
+  'FACEBOOK',
+  'LINKEDIN',
+  'TIKTOK',
+  'YOUTUBE',
+  'GITHUB',
+  'PERSONAL',
+  'OTHER'
+] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+export const socialAccountSchema = z.object({
+  id: z.string().cuid().optional(),
+  platform: z.enum(SOCIAL_PLATFORMS),
+  handle: z.string().min(1).max(100).optional(),
+  url: z.string().url().optional(),
+  label: z.string().max(50).optional(),
+  isPublic: z.boolean().optional(), // let the form send true/false
+  sortOrder: z.number().int().min(0).optional()
+});
+
 export const digitalCardSchema = z.object({
-  // identity / routing
-  slug: z
-    .string()
-    .min(1, 'Slug is required')
-    .max(64)
-    .regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers and hyphens only'),
-
-  // names, handle, role
-  firstName: z.string().min(1, 'First name is required').max(80),
-  lastName: z.string().min(1, 'Last name is required').max(80),
-  appName: z.string().min(1, 'Handle is required').max(50),
-  role: z.string().min(1, 'Role is required').max(80),
-
-  // enums
+  // required core
+  slug: z.string().min(3).max(64),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  appName: z.string().min(1),
+  role: z.string().min(1),
   status: z.enum(['STUDENT', 'GRADUATE', 'WORKING']),
-  publishStatus: z.enum(['DRAFT', 'PUBLISHED']),
+  // IMPORTANT: required — do NOT use .default() to avoid resolver optionality
+  publishStatus: z.enum(['DRAFT', 'PRIVATE', 'PUBLISHED']),
+  shortBio: z.string().min(1).max(300),
 
-  // content
-  shortBio: z.string().max(200, 'Max 200 characters').optional().default(''),
-  company: z.string().optional().nullable(),
-  university: z.string().optional().nullable(),
-  country: z.string().optional().nullable(),
+  // optional profile
+  company: z.string().optional(),
+  university: z.string().optional(),
+  country: z.string().optional(),
+  religion: z.string().optional(),
+  phone: z.string().optional(),
 
-  // sensitive values
-  phone: z.string().optional().nullable(),
-  religion: z.string().optional().nullable(),
+  // visibility flags (booleans are required in the final type)
+  showPhone: z.boolean(),
+  showReligion: z.boolean(),
+  showCompany: z.boolean(),
+  showUniversity: z.boolean(),
+  showCountry: z.boolean(),
 
-  // per-field visibility
-  showPhone: z.boolean().default(false),
-  showReligion: z.boolean().default(false),
-  showCompany: z.boolean().default(true),
-  showUniversity: z.boolean().default(true),
-  showCountry: z.boolean().default(true),
+  // media
+  avatarKey: z.string().optional(),
+  bannerKey: z.string().optional(),
 
-  // uploaded assets (S3 keys)
-  avatarKey: z.string().optional().nullable(),
-  bannerKey: z.string().optional().nullable()
+  // socials
+  socials: z.array(socialAccountSchema)
 });
 
 export type DigitalCardFormValues = z.infer<typeof digitalCardSchema>;
+export type SocialAccountForm = z.infer<typeof socialAccountSchema>;
