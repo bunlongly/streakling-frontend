@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'streakling.s3.ap-southeast-1.amazonaws.com'
       }
-      // or your CloudFront domain
     ]
   }
 };

@@ -1,5 +1,26 @@
 export type CardStatus = 'STUDENT' | 'GRADUATE' | 'WORKING';
-export type PublishStatus = 'DRAFT' | 'PUBLISHED';
+export type PublishStatus = 'DRAFT' | 'PRIVATE' | 'PUBLISHED';
+
+export type SocialPlatform =
+  | 'TWITTER'
+  | 'INSTAGRAM'
+  | 'FACEBOOK'
+  | 'LINKEDIN'
+  | 'TIKTOK'
+  | 'YOUTUBE'
+  | 'GITHUB'
+  | 'PERSONAL'
+  | 'OTHER';
+
+export type SocialAccount = {
+  id: string;
+  platform: SocialPlatform;
+  handle: string | null;
+  url: string | null;
+  label: string | null;
+  isPublic: boolean;
+  sortOrder: number;
+};
 
 export type DigitalCard = {
   id: string;
@@ -12,11 +33,11 @@ export type DigitalCard = {
   role: string;
   shortBio: string;
 
-  company?: string | null;
-  university?: string | null;
-  country?: string | null;
-  religion?: string | null;
-  phone?: string | null;
+  company: string | null;
+  university: string | null;
+  country: string | null;
+  religion: string | null;
+  phone: string | null;
 
   // visibility flags
   showPhone: boolean;
@@ -25,13 +46,16 @@ export type DigitalCard = {
   showUniversity: boolean;
   showCountry: boolean;
 
-  avatarKey?: string | null;
-  bannerKey?: string | null;
+  avatarKey: string | null;
+  bannerKey: string | null;
 
   publishStatus: PublishStatus;
-  publishedAt?: string | null;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+
+  // NEW: socials
+  socials: SocialAccount[];
 };
 
 export type UpsertCardInput = {
@@ -57,5 +81,17 @@ export type UpsertCardInput = {
 
   avatarKey?: string | null;
   bannerKey?: string | null;
+
   publishStatus?: PublishStatus;
+
+  // NEW: socials on create/update (backend replaces if provided)
+  socials?: Array<{
+    id?: string;
+    platform: SocialPlatform;
+    handle?: string;
+    url?: string;
+    label?: string;
+    isPublic?: boolean;
+    sortOrder?: number;
+  }>;
 };
