@@ -1,6 +1,6 @@
 'use client';
 
-import ProfileCardForm from '@/components/forms/ProfileCardForm';
+import ProfileCardForm from '@/components/digital-card/ProfileCardForm';
 import AuthGate from '@/components/AuthGate';
 import Header from '@/components/Header';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';

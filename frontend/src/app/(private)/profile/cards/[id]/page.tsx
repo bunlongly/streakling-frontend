@@ -1,41 +1,38 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import Header from '@/components/Header';
+// src/app/(private)/profile/cards/[id]/page.tsx
 import AuthGate from '@/components/AuthGate';
-import useBackendSessionSync from '@/lib/useBackendSessionSync';
-import ProfileCardForm from '@/components/forms/ProfileCardForm';
-import { api, type DigitalCard } from '@/lib/api';
+import ProfileCardForm from '@/components/digital-card/ProfileCardForm';
+import DeleteCardButton from '@/components/digital-card/DeleteCardButton';
+import { api } from '@/lib/api';
+import { cookies } from 'next/headers';
 
-export default function EditCardPage({ params }: { params: { id: string } }) {
-  const synced = useBackendSessionSync();
-  const [initial, setInitial] = useState<Partial<DigitalCard> | null>(null);
+async function getInitial(id: string) {
+  // Forward the user’s cookies so your backend session works on the server
+  const cookieHeader = cookies().toString();
+  const res = await api.card.getById(id, {
+    headers: { cookie: cookieHeader },
+    cache: 'no-store'
+  } as any);
+  return res.data; // ApiSuccess<DigitalCard> -> .data
+}
 
-  useEffect(() => {
-    if (!synced) return;
-    api.card.listMine()
-      .then(r => {
-        const found = r.data.find(c => c.id === params.id);
-        setInitial(found ?? null);
-      })
-      .catch(() => setInitial(null));
-  }, [synced, params.id]);
+export default async function EditCardPage({
+  params
+}: {
+  params: { id: string };
+}) {
+  const { id } = params;
+  const initial = await getInitial(id);
 
   return (
     <AuthGate>
-      <main className="min-h-dvh bg-brand-mix">
-        <Header />
-        <section className="max-w-3xl mx-auto mt-16 p-6 card-surface">
-          <h1 className="h1 mb-4">Edit Digital Card</h1>
-          {!synced ? (
-            <p className="muted">Preparing your session…</p>
-          ) : initial === null ? (
-            <p className="muted">Card not found.</p>
-          ) : (
-            <ProfileCardForm initial={initial} id={params.id} />
-          )}
-        </section>
-      </main>
+      <div className='max-w-3xl mx-auto space-y-6'>
+        <div className='flex items-center justify-between'>
+          <h1 className='text-2xl font-semibold'>Edit digital card</h1>
+          <DeleteCardButton id={id} />
+        </div>
+        {/* Your form already supports edit mode when `id` is present */}
+        <ProfileCardForm id={id} initial={initial} />
+      </div>
     </AuthGate>
   );
 }

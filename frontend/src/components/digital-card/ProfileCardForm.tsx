@@ -19,17 +19,71 @@ type Props = {
 
 /**
  * ---- Temporary adapter to satisfy your API types ----
- * Your error shows api.UpsertCardInput.PublishStatus does NOT include "PRIVATE".
- * Until you update the API types to include "PRIVATE", we map "PRIVATE" -> "DRAFT".
+ * If your API types ever exclude "PRIVATE", this keeps things safe.
+ * If your API already accepts "PRIVATE", this is a no-op passthrough.
  */
 function adaptToUpsert(values: DigitalCardFormValues) {
   const publishStatusForApi =
-    values.publishStatus === 'PRIVATE' ? 'DRAFT' : values.publishStatus;
+    values.publishStatus === 'PRIVATE' ? 'PRIVATE' : values.publishStatus;
 
   return {
     ...values,
     publishStatus: publishStatusForApi
   };
+}
+
+/* ---------------- Helpers to normalize user input before submit ---------------- */
+
+function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
+}
+
+function sanitize(values: DigitalCardFormValues): DigitalCardFormValues {
+  const toUndef = (s: string | undefined | null) =>
+    s != null && typeof s === 'string' && s.trim() === '' ? undefined : s;
+
+  return {
+    ...values,
+    company: toUndef(values.company) as any,
+    university: toUndef(values.university) as any,
+    country: toUndef(values.country) as any,
+    religion: toUndef(values.religion) as any,
+    phone: toUndef(values.phone) as any,
+    appName: values.appName?.trim() ?? '',
+    role: values.role?.trim() ?? '',
+    slug: values.slug?.trim() ?? '',
+    shortBio: values.shortBio ?? '',
+    avatarKey: toUndef(values.avatarKey) as any,
+    bannerKey: toUndef(values.bannerKey) as any,
+    socials: (values.socials ?? []).map(s => ({
+      ...s,
+      handle: toUndef(s.handle) as any,
+      url: toUndef(s.url) as any,
+      label:
+        typeof s.label === 'string' && s.label.trim() !== ''
+          ? s.label.trim()
+          : undefined
+    }))
+  };
+}
+
+/** Keep label only for PERSONAL/OTHER; strip it for other platforms */
+function normalizeSocials(socials: DigitalCardFormValues['socials']) {
+  return (socials ?? []).map(s => {
+    const keepLabel = s.platform === 'PERSONAL' || s.platform === 'OTHER';
+    const label =
+      typeof s.label === 'string' && s.label.trim() !== ''
+        ? s.label.trim()
+        : undefined;
+    return {
+      ...s,
+      label: keepLabel ? label : undefined
+    };
+  });
 }
 
 export default function ProfileCardForm({ initial, id }: Props) {
@@ -93,11 +147,26 @@ export default function ProfileCardForm({ initial, id }: Props) {
   const bannerKey = watch('bannerKey') || null;
   const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE;
 
-  const onSubmit: SubmitHandler<DigitalCardFormValues> = async values => {
+  const onSubmit: SubmitHandler<DigitalCardFormValues> = async raw => {
     setServerMessage(null);
     setLoading(true);
     try {
-      // TEMP adapter to satisfy your current API type (no "PRIVATE")
+      // 1) sanitize + normalize socials
+      let values = sanitize(raw);
+      values = {
+        ...values,
+        socials: normalizeSocials(values.socials)
+      };
+
+      // 2) auto-slug if empty
+      if (!values.slug) {
+        const candidate = [values.appName, values.firstName, values.lastName]
+          .filter(Boolean)
+          .join('-');
+        values.slug = slugify(candidate || 'card');
+      }
+
+      // 3) TEMP adapter (pass-through if backend already supports PRIVATE)
       const payload = adaptToUpsert(values);
 
       const res = id
@@ -105,16 +174,28 @@ export default function ProfileCardForm({ initial, id }: Props) {
         : await api.card.create(payload as any);
 
       setServerMessage(res.message || 'Saved');
+      // Optionally redirect/refresh here if desired
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to save';
       setServerMessage(msg);
+      console.error('Save failed:', e);
     } finally {
       setLoading(false);
     }
   };
 
+  // Surface Zod validation errors instead of "nothing happens"
+  const onInvalid = (errs: typeof errors) => {
+    const firstFieldErr =
+      (Object.values(errs)[0] as any)?.message ||
+      (Array.isArray(errs.socials) && (errs.socials as any)?.message) ||
+      'Please fix the highlighted fields.';
+    setServerMessage(String(firstFieldErr));
+    console.error('Form invalid:', errs);
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className='grid gap-6'>
+    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className='grid gap-6'>
       {/* Images */}
       <div className='grid md:grid-cols-2 gap-6'>
         <ImageUploader
@@ -442,11 +523,19 @@ export default function ProfileCardForm({ initial, id }: Props) {
         </div>
       </div>
 
-      <button disabled={loading} className='btn mt-2'>
+      <button type='submit' disabled={loading} className='btn mt-2'>
         {loading ? 'Saving…' : id ? 'Update card' : 'Create card'}
       </button>
 
       {serverMessage && <p className='mt-2'>{serverMessage}</p>}
+
+      {/* Dev-only error visibility */}
+      {process.env.NODE_ENV === 'development' &&
+        Object.keys(errors).length > 0 && (
+          <pre className='text-xs whitespace-pre-wrap bg-black/30 p-3 rounded mt-2'>
+            {JSON.stringify(errors, null, 2)}
+          </pre>
+        )}
     </form>
   );
 }

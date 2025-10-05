@@ -145,11 +145,16 @@ export const apiCard = {
   create: (payload: UpsertCardInput) =>
     http.post<ApiSuccess<DigitalCard>>('/api/digital-name-cards', payload),
 
+  getById: (id: string, init?: RequestInitExtra) =>
+    http.get<ApiSuccess<DigitalCard>>(`/api/digital-name-cards/${id}`, init),
+
   updateById: (id: string, payload: Partial<UpsertCardInput>) =>
     http.patch<ApiSuccess<DigitalCard>>(
       `/api/digital-name-cards/${id}`,
       payload
-    )
+    ),
+  deleteById: (id: string) =>
+    http.delete<ApiSuccess<{ id: string }>>(`/api/digital-name-cards/${id}`)
 };
 
 // ---- Upload signing ----
