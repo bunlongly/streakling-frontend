@@ -2,13 +2,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm, useFieldArray, type SubmitHandler } from 'react-hook-form';
+import {
+  useForm,
+  useFieldArray,
+  type SubmitHandler,
+  type SubmitErrorHandler,
+  type Resolver,
+  type FieldErrors
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import ImageUploader from '@/components/uploader/ImageUploader';
 import { api } from '@/lib/api';
 import {
   digitalCardSchema,
   type DigitalCardFormValues,
+  type SocialAccountForm,
   SOCIAL_PLATFORMS
 } from '@/schemas/digitalCard';
 
@@ -17,22 +25,17 @@ type Props = {
   initial?: Partial<DigitalCardFormValues>;
 };
 
-/**
- * ---- Temporary adapter to satisfy your API types ----
- * If your API types ever exclude "PRIVATE", this keeps things safe.
- * If your API already accepts "PRIVATE", this is a no-op passthrough.
- */
+/** --- Adapter to keep API types happy even if PRIVATE was excluded before --- */
 function adaptToUpsert(values: DigitalCardFormValues) {
   const publishStatusForApi =
     values.publishStatus === 'PRIVATE' ? 'PRIVATE' : values.publishStatus;
-
   return {
     ...values,
     publishStatus: publishStatusForApi
   };
 }
 
-/* ---------------- Helpers to normalize user input before submit ---------------- */
+/* ---------------- Helpers ---------------- */
 
 function slugify(input: string) {
   return input
@@ -43,26 +46,26 @@ function slugify(input: string) {
 }
 
 function sanitize(values: DigitalCardFormValues): DigitalCardFormValues {
-  const toUndef = (s: string | undefined | null) =>
+  const toUndef = (s: string | undefined | null): string | undefined =>
     s != null && typeof s === 'string' && s.trim() === '' ? undefined : s;
 
   return {
     ...values,
-    company: toUndef(values.company) as any,
-    university: toUndef(values.university) as any,
-    country: toUndef(values.country) as any,
-    religion: toUndef(values.religion) as any,
-    phone: toUndef(values.phone) as any,
+    company: toUndef(values.company),
+    university: toUndef(values.university),
+    country: toUndef(values.country),
+    religion: toUndef(values.religion),
+    phone: toUndef(values.phone),
     appName: values.appName?.trim() ?? '',
     role: values.role?.trim() ?? '',
     slug: values.slug?.trim() ?? '',
     shortBio: values.shortBio ?? '',
-    avatarKey: toUndef(values.avatarKey) as any,
-    bannerKey: toUndef(values.bannerKey) as any,
-    socials: (values.socials ?? []).map(s => ({
+    avatarKey: toUndef(values.avatarKey),
+    bannerKey: toUndef(values.bannerKey),
+    socials: (values.socials ?? []).map<SocialAccountForm>(s => ({
       ...s,
-      handle: toUndef(s.handle) as any,
-      url: toUndef(s.url) as any,
+      handle: toUndef(s.handle),
+      url: toUndef(s.url),
       label:
         typeof s.label === 'string' && s.label.trim() !== ''
           ? s.label.trim()
@@ -71,9 +74,11 @@ function sanitize(values: DigitalCardFormValues): DigitalCardFormValues {
   };
 }
 
-/** Keep label only for PERSONAL/OTHER; strip it for other platforms */
-function normalizeSocials(socials: DigitalCardFormValues['socials']) {
-  return (socials ?? []).map(s => {
+/** Keep label only for PERSONAL/OTHER; strip otherwise */
+function normalizeSocials(
+  socials: DigitalCardFormValues['socials']
+): SocialAccountForm[] {
+  return (socials ?? []).map<SocialAccountForm>(s => {
     const keepLabel = s.platform === 'PERSONAL' || s.platform === 'OTHER';
     const label =
       typeof s.label === 'string' && s.label.trim() !== ''
@@ -84,6 +89,37 @@ function normalizeSocials(socials: DigitalCardFormValues['socials']) {
       label: keepLabel ? label : undefined
     };
   });
+}
+
+/** Safely find the first validation message without using `any` */
+function firstErrorMessage(
+  errs: FieldErrors<DigitalCardFormValues>
+): string | null {
+  const scan = (node: unknown): string | null => {
+    if (!node) return null;
+
+    if (typeof node === 'object') {
+      const rec = node as Record<string, unknown>;
+
+      const msg = rec['message'];
+      if (typeof msg === 'string') return msg;
+
+      if (Array.isArray(node)) {
+        for (const item of node) {
+          const found = scan(item);
+          if (found) return found;
+        }
+      } else {
+        for (const v of Object.values(rec)) {
+          const found = scan(v);
+          if (found) return found;
+        }
+      }
+    }
+    return null;
+  };
+
+  return scan(errs);
 }
 
 export default function ProfileCardForm({ initial, id }: Props) {
@@ -98,7 +134,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
     control,
     formState: { errors }
   } = useForm<DigitalCardFormValues>({
-    resolver: zodResolver(digitalCardSchema),
+    resolver: zodResolver(digitalCardSchema) as Resolver<DigitalCardFormValues>,
     defaultValues: {
       // REQUIRED by schema
       slug: '',
@@ -107,7 +143,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
       appName: '',
       role: '',
       status: 'WORKING',
-      publishStatus: 'DRAFT', // schema: 'DRAFT' | 'PRIVATE' | 'PUBLISHED'
+      publishStatus: 'DRAFT',
       shortBio: '',
 
       // required booleans
@@ -128,7 +164,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
       avatarKey: undefined,
       bannerKey: undefined,
 
-      // socials array (required by schema; can be empty)
+      // socials array (can be empty)
       socials: [],
 
       // let incoming initial override
@@ -147,16 +183,17 @@ export default function ProfileCardForm({ initial, id }: Props) {
   const bannerKey = watch('bannerKey') || null;
   const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE;
 
+  // Infer the exact body types expected by your API methods
+  type CreateBody = Parameters<(typeof api)['card']['create']>[0];
+  type UpdateBody = Parameters<(typeof api)['card']['updateById']>[1];
+
   const onSubmit: SubmitHandler<DigitalCardFormValues> = async raw => {
     setServerMessage(null);
     setLoading(true);
     try {
       // 1) sanitize + normalize socials
       let values = sanitize(raw);
-      values = {
-        ...values,
-        socials: normalizeSocials(values.socials)
-      };
+      values = { ...values, socials: normalizeSocials(values.socials) };
 
       // 2) auto-slug if empty
       if (!values.slug) {
@@ -166,31 +203,43 @@ export default function ProfileCardForm({ initial, id }: Props) {
         values.slug = slugify(candidate || 'card');
       }
 
-      // 3) TEMP adapter (pass-through if backend already supports PRIVATE)
-      const payload = adaptToUpsert(values);
+      // 3) payload
+      const upsert = adaptToUpsert(values);
 
-      const res = id
-        ? await api.card.updateById(id, payload as any)
-        : await api.card.create(payload as any);
-
-      setServerMessage(res.message || 'Saved');
-      // Optionally redirect/refresh here if desired
+      // 4) call correct API with correct types
+      if (id) {
+        const body: UpdateBody = upsert as UpdateBody;
+        const res = await api.card.updateById(id, body);
+        setServerMessage(
+          'message' in res && typeof res.message === 'string'
+            ? res.message
+            : 'Saved'
+        );
+      } else {
+        const body: CreateBody = upsert as CreateBody;
+        const res = await api.card.create(body);
+        setServerMessage(
+          'message' in res && typeof res.message === 'string'
+            ? res.message
+            : 'Saved'
+        );
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to save';
       setServerMessage(msg);
+
       console.error('Save failed:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  // Surface Zod validation errors instead of "nothing happens"
-  const onInvalid = (errs: typeof errors) => {
-    const firstFieldErr =
-      (Object.values(errs)[0] as any)?.message ||
-      (Array.isArray(errs.socials) && (errs.socials as any)?.message) ||
-      'Please fix the highlighted fields.';
-    setServerMessage(String(firstFieldErr));
+  // Show a clear first error
+  const onInvalid: SubmitErrorHandler<DigitalCardFormValues> = errs => {
+    setServerMessage(
+      firstErrorMessage(errs) ?? 'Please fix the highlighted fields.'
+    );
+
     console.error('Form invalid:', errs);
   };
 
@@ -206,7 +255,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
           previewUrl={
             avatarKey && PUBLIC_BASE ? `${PUBLIC_BASE}/${avatarKey}` : null
           }
-          onUploaded={key =>
+          onUploadedAction={(key: string) =>
             setValue('avatarKey', key, { shouldDirty: true, shouldTouch: true })
           }
         />
@@ -218,7 +267,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
           previewUrl={
             bannerKey && PUBLIC_BASE ? `${PUBLIC_BASE}/${bannerKey}` : null
           }
-          onUploaded={key =>
+          onUploadedAction={(key: string) =>
             setValue('bannerKey', key, { shouldDirty: true, shouldTouch: true })
           }
         />
@@ -429,7 +478,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
                 url: '',
                 isPublic: true,
                 sortOrder: fields.length
-              })
+              } satisfies SocialAccountForm)
             }
           >
             + Add social
@@ -515,10 +564,9 @@ export default function ProfileCardForm({ initial, id }: Props) {
               </div>
             </div>
           ))}
-          {errors.socials && (
-            <p className='text-red-400 text-sm'>
-              {(errors.socials as any)?.message}
-            </p>
+          {/* Show the top-most error message */}
+          {firstErrorMessage(errors) && (
+            <p className='text-red-400 text-sm'>{firstErrorMessage(errors)}</p>
           )}
         </div>
       </div>

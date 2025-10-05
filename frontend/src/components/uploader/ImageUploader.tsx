@@ -1,28 +1,24 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { api } from '@/lib/api';
 
 type Props = {
   label: string;
   category: 'digitalcard' | 'portfolio' | 'profile';
-  purpose?: string; // e.g. 'avatar' | 'banner'
+  purpose?: string;
   accept?: string; // default 'image/*'
   maxBytes?: number; // default 5MB
-  /**
-   * Optional remote preview (e.g. `${NEXT_PUBLIC_S3_PUBLIC_BASE}/${key}`)
-   * Useful if you expose public reads via CloudFront or public bucket.
-   * Local preview (blob URL) always takes precedence.
-   */
   previewUrl?: string | null;
-  /**
-   * If you store/know the S3 key already, you can pass it; we’ll build a
-   * remote preview from it if NEXT_PUBLIC_S3_PUBLIC_BASE is set.
-   */
   existingKey?: string | null;
 
-  // Called after successful upload with the S3 object key (e.g. 'digitalcard/avatar/…')
-  onUploaded: (key: string) => void;
+  /**
+   * NOTE: renamed from `onUploaded` -> `onUploadedAction`
+   * to satisfy: “Props must be serializable for components
+   * in the 'use client' entry file…”
+   */
+  onUploadedAction: (key: string) => void;
 };
 
 export default function ImageUploader({
@@ -33,7 +29,7 @@ export default function ImageUploader({
   maxBytes = 5 * 1024 * 1024,
   previewUrl,
   existingKey,
-  onUploaded
+  onUploadedAction
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -97,7 +93,7 @@ export default function ImageUploader({
       if (!put.ok) throw new Error(`Upload failed: ${put.status}`);
 
       // 3) Inform parent with the S3 key
-      onUploaded(data.key);
+      onUploadedAction(data.key);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Upload failed';
       setError(msg);
@@ -107,17 +103,35 @@ export default function ImageUploader({
   };
 
   const shownSrc = localPreview || previewUrl || remoteFromKey || null;
+  const isBlobLike =
+    typeof shownSrc === 'string' &&
+    (shownSrc.startsWith('blob:') || shownSrc.startsWith('data:'));
 
   return (
     <div className='grid gap-2'>
       <label className='font-medium'>{label}</label>
 
       {shownSrc ? (
-        <img
-          src={shownSrc}
-          alt='preview'
-          className='h-28 w-28 object-cover rounded-lg border border-white/10'
-        />
+        isBlobLike ? (
+          // For blob/data previews, next/image can’t optimize; use <img> and silence the rule here.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={shownSrc}
+            alt='preview'
+            width={112}
+            height={112}
+            className='h-28 w-28 object-cover rounded-lg border border-white/10'
+          />
+        ) : (
+          <Image
+            src={shownSrc}
+            alt='preview'
+            width={112}
+            height={112}
+            className='h-28 w-28 object-cover rounded-lg border border-white/10'
+            priority
+          />
+        )
       ) : (
         <div className='h-28 w-28 grid place-items-center rounded-lg border border-dashed border-white/15 text-sm opacity-80'>
           No image

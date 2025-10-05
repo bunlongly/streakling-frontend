@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import type { DigitalCard } from '@/types/digitalCard';
 
 const S3_PUBLIC = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE;
@@ -16,22 +17,28 @@ export default function PublicDigitalCard({ card }: Props) {
     <div className='rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm'>
       {bannerUrl && (
         <div className='relative h-40 w-full'>
-          <img
+          <Image
             src={bannerUrl}
             alt='banner'
-            className='h-full w-full object-cover'
+            fill
+            priority
+            sizes='(max-width: 768px) 100vw, 1024px'
+            className='object-cover'
           />
         </div>
       )}
 
       <div className='p-5 md:p-6'>
         <div className='flex items-start gap-4'>
-          <div className='h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-100 ring-1 ring-gray-200'>
+          <div className='relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-gray-100 ring-1 ring-gray-200'>
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt={`${card.firstName} ${card.lastName}`}
-                className='h-full w-full object-cover'
+                fill
+                sizes='80px'
+                className='object-cover'
+                priority
               />
             ) : (
               <div className='flex h-full w-full items-center justify-center text-xl font-semibold text-gray-700'>

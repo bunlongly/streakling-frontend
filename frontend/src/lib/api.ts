@@ -7,6 +7,11 @@ import type {
   PublishStatus,
   CardStatus
 } from '@/types/digitalCard';
+import type {
+  Portfolio,
+  CreatePortfolioInput,
+  UpdatePortfolioInput
+} from '@/types/portfolio';
 
 export const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL;
 if (!API_BASE) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
@@ -157,6 +162,29 @@ export const apiCard = {
     http.delete<ApiSuccess<{ id: string }>>(`/api/digital-name-cards/${id}`)
 };
 
+export const apiPortfolio = {
+  /** GET /api/portfolios (list my portfolios) */
+  listMine: (init?: any) =>
+    http.get<ApiSuccess<Portfolio[]>>('/api/portfolios', init),
+
+  /** GET /api/portfolios/:id */
+  getById: (id: string, init?: any) =>
+    http.get<ApiSuccess<Portfolio>>(`/api/portfolios/${id}`, init),
+
+  /** POST /api/portfolios */
+  create: (payload: CreatePortfolioInput) =>
+    http.post<ApiSuccess<Portfolio>>('/api/portfolios', payload),
+
+  /** PATCH /api/portfolios/:id */
+  updateById: (id: string, payload: UpdatePortfolioInput) =>
+    http.patch<ApiSuccess<Portfolio>>(`/api/portfolios/${id}`, payload),
+
+  /** DELETE /api/portfolios/:id */
+  deleteById: (id: string) =>
+    http.delete<ApiSuccess<{ deleted: boolean }>>(`/api/portfolios/${id}`)
+};
+
+
 // ---- Upload signing ----
 export type SignUploadInput = {
   category: 'digitalcard' | 'portfolio' | 'profile';
@@ -181,8 +209,17 @@ export const apiUploads = {
 export const api = {
   session: apiSession,
   card: apiCard,
+  portfolio: apiPortfolio, // 👈 added
   uploads: apiUploads
 };
 
 // Re-export types for convenience
-export type { DigitalCard, UpsertCardInput, PublishStatus, CardStatus };
+export type {
+  DigitalCard,
+  UpsertCardInput,
+  PublishStatus,
+  CardStatus,
+  Portfolio,
+  CreatePortfolioInput,
+  UpdatePortfolioInput
+};

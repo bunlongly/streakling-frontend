@@ -4,7 +4,18 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-export default function DeleteCardButton({ id }: { id: string }) {
+type Props = { id: string };
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return 'Failed to delete card';
+}
+
+export default function DeleteCardButton({ id }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -13,11 +24,10 @@ export default function DeleteCardButton({ id }: { id: string }) {
     setLoading(true);
     try {
       await api.card.deleteById(id);
-      // Go back to cards list (adjust path to your actual list route)
       router.push('/profile/cards');
       router.refresh();
-    } catch (e: any) {
-      alert(e?.message || 'Failed to delete card');
+    } catch (e: unknown) {
+      alert(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -26,15 +36,17 @@ export default function DeleteCardButton({ id }: { id: string }) {
   return (
     <>
       <button
+        type='button'
         className='btn-ghost text-red-400 hover:text-red-300'
         onClick={() => setOpen(true)}
       >
         Delete
       </button>
-
       {open && (
         <div className='fixed inset-0 z-50 flex items-center justify-center'>
-          <div
+          <button
+            type='button'
+            aria-label='Close'
             className='absolute inset-0 bg-black/60'
             onClick={() => setOpen(false)}
           />
@@ -45,6 +57,7 @@ export default function DeleteCardButton({ id }: { id: string }) {
             </p>
             <div className='mt-4 flex justify-end gap-2'>
               <button
+                type='button'
                 className='btn-secondary'
                 onClick={() => setOpen(false)}
                 disabled={loading}
@@ -52,6 +65,7 @@ export default function DeleteCardButton({ id }: { id: string }) {
                 Cancel
               </button>
               <button
+                type='button'
                 className='btn bg-red-600 hover:bg-red-500'
                 onClick={onDelete}
                 disabled={loading}
