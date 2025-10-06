@@ -164,6 +164,7 @@ export const apiCard = {
 
 export const apiPortfolio = {
   /** GET /api/portfolios (list my portfolios) */
+  /** GET /api/portfolios (list my portfolios) */
   listMine: (init?: any) =>
     http.get<ApiSuccess<Portfolio[]>>('/api/portfolios', init),
 
@@ -181,9 +182,14 @@ export const apiPortfolio = {
 
   /** DELETE /api/portfolios/:id */
   deleteById: (id: string) =>
-    http.delete<ApiSuccess<{ deleted: boolean }>>(`/api/portfolios/${id}`)
-};
+    http.delete<ApiSuccess<{ deleted: boolean }>>(`/api/portfolios/${id}`),
 
+  /** GET (PUBLIC) /api/portfolios/slug/:slug */
+  publicGetBySlug: (slug: string) =>
+    http.get<ApiSuccess<Portfolio>>(
+      `/api/portfolios/slug/${encodeURIComponent(slug)}`
+    )
+};
 
 // ---- Upload signing ----
 export type SignUploadInput = {

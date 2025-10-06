@@ -3,7 +3,6 @@ import { api } from '@/lib/api';
 import Link from 'next/link';
 
 export default async function MyPortfoliosPage() {
-  // ✅ forward cookies so /api/portfolios (list mine) is authorized on the server
   const cookieHeader = (await headers()).get('cookie') ?? '';
   const { data: portfolios } = await api.portfolio.listMine({
     headers: { cookie: cookieHeader }
@@ -23,21 +22,39 @@ export default async function MyPortfoliosPage() {
           <p className='text-sm text-neutral-500'>No portfolios yet.</p>
         )}
         {portfolios.map(p => (
-          <Link
-            key={p.id}
-            href={`/profile/portfolios/${p.id}`}
-            className='block rounded border p-4 hover:bg-neutral-50'
-          >
-            <div className='font-medium'>{p.title}</div>
-            {p.tags && p.tags.length > 0 && (
-              <div className='mt-1 text-xs text-neutral-600'>
-                {p.tags.join(', ')}
+          <div key={p.id} className='rounded border p-4'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <div className='font-medium'>{p.title}</div>
+                <div className='text-xs text-neutral-500'>
+                  slug: <code>{p.slug}</code>
+                </div>
+                {p.tags?.length ? (
+                  <div className='mt-1 text-xs text-neutral-600'>
+                    {p.tags.join(', ')}
+                  </div>
+                ) : null}
+                <div className='mt-1 text-xs text-neutral-500'>
+                  Updated {new Date(p.updatedAt).toLocaleString()}
+                </div>
               </div>
-            )}
-            <div className='mt-1 text-xs text-neutral-500'>
-              Updated {new Date(p.updatedAt).toLocaleString()}
+
+              <div className='flex gap-3'>
+                <Link
+                  href={`/profile/portfolios/${p.id}`}
+                  className='text-sm underline'
+                >
+                  Edit
+                </Link>
+                <Link
+                  href={`/profile/portfolio/${p.slug}`}
+                  className='text-sm underline'
+                >
+                  Public page
+                </Link>
+              </div>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
     </div>

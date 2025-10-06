@@ -1,44 +1,55 @@
 import { z } from 'zod';
 
-const emptyToUndef = <T extends z.ZodTypeAny>(schema: T) =>
-  z.preprocess(v => (v === '' ? undefined : v), schema);
-
 export const VIDEO_PLATFORMS = [
-  'TIKTOK',
-  'YOUTUBE',
   'TWITTER',
   'INSTAGRAM',
   'FACEBOOK',
   'LINKEDIN',
+  'TIKTOK',
+  'YOUTUBE',
   'GITHUB',
   'PERSONAL',
   'OTHER'
 ] as const;
 
-export const portfolioImageSchema = z.object({
-  id: z.string().cuid().optional(),
+const SocialPlatform = z.enum(VIDEO_PLATFORMS);
+const PublishStatus = z.enum(['DRAFT', 'PRIVATE', 'PUBLISHED']); // 👈 add
+
+const nullableToUndef = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.nullable().transform(v => (v == null ? undefined : v));
+
+const subImageSchema = z.object({
   key: z.string().min(1),
   url: z.string().url(),
-  sortOrder: z.number().int().optional()
+  sortOrder: z.number().int().min(0).optional()
 });
 
-export const portfolioVideoSchema = z.object({
-  id: z.string().cuid().optional(),
-  platform: z.enum(VIDEO_PLATFORMS),
+const videoLinkSchema = z.object({
+  platform: SocialPlatform,
   url: z.string().url(),
-  description: emptyToUndef(z.string().max(500).optional()),
-  thumbnailUrl: emptyToUndef(z.string().url().optional())
+  description: nullableToUndef(z.string().max(300).optional())
+});
+
+const projectSchema = z.object({
+  title: z.string().min(1).max(160),
+  description: nullableToUndef(z.string().max(4000).optional()),
+  mainImageKey: z.string().optional(),
+  tags: z.array(z.string().min(1)).optional(),
+  subImages: z.array(subImageSchema).optional(),
+  videoLinks: z.array(videoLinkSchema).optional()
 });
 
 export const createPortfolioSchema = z.object({
+  slug: z.string().min(1).max(120).optional(), // 👈 add
+  publishStatus: PublishStatus.optional(), // 👈 add
+
   title: z.string().min(1).max(120),
-  description: emptyToUndef(z.string().max(2000).optional()),
-  mainImageKey: emptyToUndef(z.string().optional()),
-  subImages: z.array(portfolioImageSchema).max(12).optional(),
-  videoLinks: z.array(portfolioVideoSchema).optional(),
-  tags: z.array(z.string().min(1).max(50)).max(20).optional()
+  description: nullableToUndef(z.string().max(2000).optional()),
+  mainImageKey: z.string().optional(),
+  tags: z.array(z.string().min(1)).optional(),
+  subImages: z.array(subImageSchema).optional(),
+  videoLinks: z.array(videoLinkSchema).optional(),
+  projects: z.array(projectSchema).optional()
 });
 
 export type PortfolioFormValues = z.infer<typeof createPortfolioSchema>;
-export const updatePortfolioSchema = createPortfolioSchema.partial();
-export type UpdatePortfolioFormValues = z.infer<typeof updatePortfolioSchema>;
