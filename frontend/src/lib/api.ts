@@ -10,7 +10,8 @@ import type {
 import type {
   Portfolio,
   CreatePortfolioInput,
-  UpdatePortfolioInput
+  UpdatePortfolioInput,
+  PortfolioPublicList
 } from '@/types/portfolio';
 
 export const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -171,6 +172,11 @@ export const apiCard = {
 };
 
 export const apiPortfolio = {
+  listPublic: (params?: { limit?: number; cursor?: string }) =>
+    http.get<ApiSuccess<PortfolioPublicList>>('/api/portfolios/public', {
+      query: params
+    }),
+
   listMine: (init?: any) =>
     http.get<ApiSuccess<Portfolio[]>>('/api/portfolios', init),
 

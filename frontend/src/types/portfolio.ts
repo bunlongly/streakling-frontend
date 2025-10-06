@@ -140,6 +140,13 @@ export type Portfolio = {
     avatarKey?: string;
     bannerKey?: string;
   } | null;
+
+  isOwner?: boolean;
+};
+
+export type PortfolioPublicList = {
+  items: Portfolio[];
+  nextCursor: string | null;
 };
 
 /* ========= Inputs ========= */
