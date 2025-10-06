@@ -144,6 +144,14 @@ export const apiCard = {
       `/api/digital-name-card/slug/${encodeURIComponent(slug)}`
     ),
 
+  listPublished: (params?: { q?: string; take?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: (DigitalCard & { canEdit?: boolean })[];
+        nextCursor: string | null;
+      }>
+    >('/api/digital-name-cards', { query: params }),
+
   listMine: () =>
     http.get<ApiSuccess<DigitalCard[]>>('/api/me/digital-name-cards'),
 
@@ -163,32 +171,45 @@ export const apiCard = {
 };
 
 export const apiPortfolio = {
-  /** GET /api/portfolios (list my portfolios) */
-  /** GET /api/portfolios (list my portfolios) */
   listMine: (init?: any) =>
     http.get<ApiSuccess<Portfolio[]>>('/api/portfolios', init),
 
-  /** GET /api/portfolios/:id */
   getById: (id: string, init?: any) =>
     http.get<ApiSuccess<Portfolio>>(`/api/portfolios/${id}`, init),
 
-  /** POST /api/portfolios */
   create: (payload: CreatePortfolioInput) =>
     http.post<ApiSuccess<Portfolio>>('/api/portfolios', payload),
 
-  /** PATCH /api/portfolios/:id */
   updateById: (id: string, payload: UpdatePortfolioInput) =>
     http.patch<ApiSuccess<Portfolio>>(`/api/portfolios/${id}`, payload),
 
-  /** DELETE /api/portfolios/:id */
   deleteById: (id: string) =>
     http.delete<ApiSuccess<{ deleted: boolean }>>(`/api/portfolios/${id}`),
 
-  /** GET (PUBLIC) /api/portfolios/slug/:slug */
   publicGetBySlug: (slug: string) =>
     http.get<ApiSuccess<Portfolio>>(
       `/api/portfolios/slug/${encodeURIComponent(slug)}`
-    )
+    ),
+
+  /** NEW: get default form values copied from a card you own (title/description/about) */
+  prefillFromCard: (cardId: string) =>
+    http.get<
+      ApiSuccess<{
+        title?: string;
+        description?: string;
+        about?: {
+          firstName?: string;
+          lastName?: string;
+          role?: string;
+          shortBio?: string;
+          company?: string;
+          university?: string;
+          country?: string;
+          avatarKey?: string;
+          bannerKey?: string;
+        };
+      }>
+    >(`/api/portfolios/prefill-from-card/${encodeURIComponent(cardId)}`)
 };
 
 // ---- Upload signing ----

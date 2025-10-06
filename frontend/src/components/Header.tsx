@@ -6,10 +6,11 @@ import { UserButton, useAuth } from '@clerk/nextjs';
 
 const navItems = [
   { href: '/', label: 'Home' },
+  { href: '/profile/digitalcard', label: 'Explore Digital card' },
   { href: '/profile/cards', label: 'My Cards' }, // list
   { href: '/profile/cards/create', label: 'Create Card' }, // create
   { href: '/profile/portfolios', label: 'My Portfolios' },
-  { href: '/profile/portfolios/create', label: 'Create Portfolio' } 
+  { href: '/profile/portfolios/create', label: 'Create Portfolio' }
 ];
 
 export default function Header() {

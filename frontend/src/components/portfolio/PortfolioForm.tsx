@@ -1,8 +1,15 @@
 // src/components/portfolio/PortfolioForm.tsx
 'use client';
 
-import { useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import {
+  useForm,
+  useFieldArray,
+  type UseFormRegister,
+  type UseFormWatch,
+  type UseFormSetValue,
+  type Control
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   createPortfolioSchema,
@@ -20,7 +27,9 @@ type Props = {
   initial?: Partial<Portfolio> | null;
 };
 
-// JSON-safe utility
+/* ========== Small utils ========== */
+
+// JSON-safe utility (keeps your original)
 function jsonSafe<T>(input: T): T {
   const seen = new WeakSet<object>();
   const walk = (val: unknown): unknown => {
@@ -51,18 +60,85 @@ function jsonSafe<T>(input: T): T {
   return walk(input) as T;
 }
 
-// normalize null -> undefined for descriptions
-function normTopVideos(vs: Array<{ description?: string | null }> | undefined) {
+// Safe stringify for react-hook-form errors (prevents circular JSON)
+function safeStringifyErrors(err: unknown) {
+  const seen = new WeakSet<object>();
+  return JSON.stringify(
+    err,
+    (_k, v) => {
+      if (v == null || typeof v !== 'object') return v;
+
+      const ctor = (v as any)?.constructor?.name || '';
+      if (
+        ctor.includes('HTML') ||
+        'nodeType' in (v as any) ||
+        'tagName' in (v as any)
+      ) {
+        return undefined;
+      }
+
+      // Trim RHF error objects to the essentials
+      if (
+        'message' in (v as any) ||
+        'type' in (v as any) ||
+        'types' in (v as any)
+      ) {
+        const out: Record<string, unknown> = {};
+        if ((v as any).message) out.message = (v as any).message;
+        if ((v as any).type) out.type = (v as any).type;
+        if ((v as any).types) out.types = (v as any).types;
+        return out;
+      }
+
+      if (seen.has(v as object)) return undefined;
+      seen.add(v as object);
+      return v;
+    },
+    2
+  );
+}
+
+/* ========== Normalizers & helpers ========== */
+
+type SubImageForm = { key: string; url: string; sortOrder?: number };
+
+// coerce null -> undefined for sortOrder every time we ingest server data
+function mapSubImages(
+  arr:
+    | Array<{ key: string; url: string; sortOrder?: number | null }>
+    | undefined
+): SubImageForm[] {
+  return (arr ?? []).map(({ key, url, sortOrder }) => ({
+    key,
+    url,
+    sortOrder: sortOrder ?? undefined
+  }));
+}
+
+// normalize null -> undefined for video descriptions
+function normTopVideos(
+  vs:
+    | Array<{
+        platform: (typeof VIDEO_PLATFORMS)[number];
+        url: string;
+        description?: string | null;
+      }>
+    | undefined
+) {
   return (vs ?? []).map(v => ({
     ...v,
     description: v?.description ?? undefined
   }));
 }
-function normProjects(ps: any[] | undefined) {
+
+// normalize project arrays & nested subImages/videos
+type ProjectForm = NonNullable<PortfolioFormValues['projects']>[number];
+function normProjects(ps: ProjectForm[] | undefined): ProjectForm[] {
   return (ps ?? []).map(p => ({
     ...p,
     description: p?.description ?? undefined,
-    videoLinks: normTopVideos(p?.videoLinks)
+    subImages: mapSubImages(p?.subImages as any),
+    videoLinks: normTopVideos(p?.videoLinks as any)
   }));
 }
 
@@ -82,17 +158,24 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
   } = useForm<PortfolioFormValues>({
     resolver: zodResolver(createPortfolioSchema),
     defaultValues: {
-      // NEW: slug / publishStatus are now supported by the server
       slug: (initial as any)?.slug ?? '',
       publishStatus: (initial as any)?.publishStatus ?? 'DRAFT',
 
       title: initial?.title ?? '',
       description: initial?.description ?? undefined,
       mainImageKey: initial?.mainImageKey ?? undefined,
-      subImages: initial?.subImages ?? [],
-      videoLinks: normTopVideos(initial?.videoLinks),
+      subImages: mapSubImages(initial?.subImages as any),
+      videoLinks: normTopVideos(initial?.videoLinks as any),
       tags: (initial?.tags ?? undefined) as string[] | undefined,
-      projects: normProjects(initial?.projects)
+      projects: normProjects(initial?.projects as any),
+
+      // NEW
+      about: (initial as any)?.about ?? undefined,
+      experiences: (initial as any)?.experiences ?? [],
+      educations: (initial as any)?.educations ?? [],
+
+      // for provenance when importing from a card
+      prefillFromCardId: undefined
     }
   });
 
@@ -101,19 +184,25 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
       reset({
         slug: (initial as any)?.slug ?? '',
         publishStatus: (initial as any)?.publishStatus ?? 'DRAFT',
-
         title: initial.title ?? '',
         description: initial.description ?? undefined,
         mainImageKey: initial.mainImageKey ?? undefined,
-        subImages: initial.subImages ?? [],
-        videoLinks: normTopVideos(initial.videoLinks),
+        subImages: mapSubImages(initial.subImages as any),
+        videoLinks: normTopVideos(initial.videoLinks as any),
         tags: (initial.tags ?? undefined) as string[] | undefined,
-        projects: normProjects(initial.projects)
+        projects: normProjects(initial.projects as any),
+
+        about: (initial as any)?.about ?? undefined,
+        experiences: (initial as any)?.experiences ?? [],
+        educations: (initial as any)?.educations ?? [],
+
+        prefillFromCardId: undefined
       });
     }
   }, [initial, reset]);
 
-  // top-level sub images
+  /* ===== Field Arrays ===== */
+
   const {
     fields: subImages,
     append: appendImage,
@@ -121,14 +210,12 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     swap: swapImage
   } = useFieldArray({ control, name: 'subImages' });
 
-  // top-level videos
   const {
     fields: videos,
     append: appendVideo,
     remove: removeVideo
   } = useFieldArray({ control, name: 'videoLinks' });
 
-  // projects
   const {
     fields: projects,
     append: appendProject,
@@ -136,23 +223,55 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     swap: swapProject
   } = useFieldArray({ control, name: 'projects' });
 
+  const {
+    fields: experiences,
+    append: appendExp,
+    remove: removeExp
+  } = useFieldArray({ control, name: 'experiences' });
+
+  const {
+    fields: educations,
+    append: appendEdu,
+    remove: removeEdu
+  } = useFieldArray({ control, name: 'educations' });
+
+  /* ===== New row factories ===== */
   function newVideo() {
     return { platform: 'TIKTOK' as const, url: '', description: '' };
   }
-  function newProject() {
+  function newProject(): ProjectForm {
     return {
       title: '',
       description: '',
-      mainImageKey: undefined as string | undefined,
-      tags: [] as string[],
-      subImages: [] as { key: string; url: string; sortOrder?: number }[],
-      videoLinks: [] as {
-        platform: (typeof VIDEO_PLATFORMS)[number];
-        url: string;
-        description?: string;
-      }[]
+      mainImageKey: undefined,
+      tags: [],
+      subImages: [],
+      videoLinks: []
     };
   }
+  function newExp() {
+    return {
+      company: '',
+      role: '',
+      location: '',
+      startDate: undefined as string | undefined,
+      endDate: undefined as string | undefined,
+      current: false,
+      summary: ''
+    };
+  }
+  function newEdu() {
+    return {
+      school: '',
+      degree: '',
+      field: '',
+      startDate: undefined as string | undefined,
+      endDate: undefined as string | undefined,
+      summary: ''
+    };
+  }
+
+  /* ===== Upload handlers ===== */
 
   function onBatchUploaded(keys: string[]) {
     const rows = keys.map((key, idx) => {
@@ -167,17 +286,32 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
       const url = buildPublicUrl(key) || '';
       return { key, url, sortOrder: idx };
     });
-    const current = (watch(`projects.${pIdx}.subImages`) ?? []) as {
-      key: string;
-      url: string;
-      sortOrder?: number;
-    }[];
+    const current = (watch(`projects.${pIdx}.subImages`) ??
+      []) as SubImageForm[];
     setValue(`projects.${pIdx}.subImages`, [...current, ...rows], {
       shouldDirty: true,
       shouldTouch: true
     });
   }
 
+  // When "current" is checked, clear endDate for that exp row
+  useEffect(() => {
+    (experiences || []).forEach((_f, i) => {
+      const curr = watch(`experiences.${i}.current` as const);
+      if (curr) {
+        const end = watch(`experiences.${i}.endDate` as const);
+        if (end) {
+          setValue(`experiences.${i}.endDate`, '', {
+            shouldDirty: true,
+            shouldTouch: true
+          });
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watch('experiences')]);
+
+  /* ===== Submit ===== */
   async function onSubmit(values: PortfolioFormValues) {
     const cleanedSub = (values.subImages ?? [])
       .map((img, idx) => ({ ...img, sortOrder: idx }))
@@ -198,28 +332,43 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         };
       }) ?? [];
 
+    const cleanedExps =
+      (values.experiences ?? []).map(e => ({
+        ...e,
+        location: e.location || undefined,
+        startDate: e.startDate || undefined,
+        endDate: e.current ? undefined : e.endDate || undefined,
+        summary: e.summary || undefined
+      })) ?? [];
+
+    const cleanedEdus =
+      (values.educations ?? []).map(ed => ({
+        ...ed,
+        degree: ed.degree || undefined,
+        field: ed.field || undefined,
+        startDate: ed.startDate || undefined,
+        endDate: ed.endDate || undefined,
+        summary: ed.summary || undefined
+      })) ?? [];
+
     const payload = jsonSafe<PortfolioFormValues>({
       ...values,
       subImages: cleanedSub,
       videoLinks: cleanedVideos,
-      projects: cleanedProjects
+      projects: cleanedProjects,
+      experiences: cleanedExps,
+      educations: cleanedEdus
     });
 
     const saved =
       mode === 'create'
-        ? (await api.portfolio.create(payload)).data
-        : (await api.portfolio.updateById(String(portfolioId), payload)).data;
+        ? (await api.portfolio.create(payload as any)).data
+        : (await api.portfolio.updateById(String(portfolioId), payload as any))
+            .data;
 
-    // Go to private detail page (you can change to list if preferred)
     window.location.assign(`/profile/portfolios/${saved.id}`);
   }
 
-  const canAddMoreImages = (subImages?.length ?? 0) < 12;
-  const canAddMoreProjects = (projects?.length ?? 0) < 20;
-
-  const setMainImageKey = (key: string) => {
-    setValue('mainImageKey', key, { shouldDirty: true, shouldTouch: true });
-  };
   const setProjectMainImageKey = (idx: number, key: string) => {
     setValue(`projects.${idx}.mainImageKey`, key, {
       shouldDirty: true,
@@ -229,13 +378,65 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
 
   const currentSlug = watch('slug') || (initial as any)?.slug || '';
 
+  /* ===== Prefill from card ===== */
+  const [cards, setCards] = useState<
+    Array<{ id: string; appName: string; firstName: string; lastName: string }>
+  >([]);
+  const [prefillCardId, setPrefillCardId] = useState<string>('');
+
+  useEffect(() => {
+    api.card
+      .listMine()
+      .then(r => {
+        const cs = (r.data ?? []).map(c => ({
+          id: (c as any).id,
+          appName: (c as any).appName,
+          firstName: (c as any).firstName,
+          lastName: (c as any).lastName
+        }));
+        setCards(cs);
+        if (cs[0]) setPrefillCardId(cs[0].id);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handlePrefill() {
+    if (!prefillCardId) return;
+    const { data } = await api.portfolio.prefillFromCard(prefillCardId);
+
+    // set hidden field so backend can snapshot provenance
+    setValue('prefillFromCardId', prefillCardId, {
+      shouldDirty: true,
+      shouldTouch: true
+    });
+
+    // merge into form (don’t touch images/projects etc.)
+    reset(
+      {
+        ...watch(), // keep current fields
+        title: data.title ?? watch('title'),
+        description: data.description ?? watch('description'),
+        about: {
+          ...watch('about'),
+          ...data.about
+        },
+        prefillFromCardId: prefillCardId
+      },
+      { keepDirty: true, keepTouched: true }
+    );
+  }
+
+  /* ===== Render ===== */
   return (
     <form className='space-y-8' onSubmit={handleSubmit(onSubmit)}>
+      {/* hidden field to persist the prefill source */}
+      <input type='hidden' {...register('prefillFromCardId')} />
+
       {/* ===== Top-level portfolio fields ===== */}
       <section className='space-y-6'>
-        {/* Slug + Publish */}
-        <div className='grid md:grid-cols-2 gap-4'>
-          <div>
+        {/* Slug + Publish + Prefill */}
+        <div className='grid md:grid-cols-3 gap-4'>
+          <div className='md:col-span-1'>
             <label className='block text-sm font-medium'>Slug</label>
             <input
               className='mt-1 w-full rounded border px-3 py-2'
@@ -243,11 +444,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
               {...register('slug')}
             />
             <p className='text-xs text-neutral-600 mt-1'>
-              Lowercase, numbers, hyphens only.
+              Lowercase, numbers, hyphens only.{' '}
               {!!currentSlug && (
                 <>
-                  {' '}
-                  Public URL:{' '}
+                  Public:{' '}
                   <a
                     className='underline'
                     href={`/portfolio/${encodeURIComponent(currentSlug)}`}
@@ -264,7 +464,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
               </p>
             )}
           </div>
-          <div>
+
+          <div className='md:col-span-1'>
             <label className='block text-sm font-medium'>Publish status</label>
             <select
               className='mt-1 w-full rounded border px-3 py-2'
@@ -274,6 +475,35 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
               <option value='PRIVATE'>Private</option>
               <option value='PUBLISHED'>Published</option>
             </select>
+          </div>
+
+          <div className='md:col-span-1'>
+            <label className='block text-sm font-medium'>
+              Prefill from card
+            </label>
+            <div className='flex gap-2 mt-1'>
+              <select
+                className='w-full rounded border px-3 py-2'
+                value={prefillCardId}
+                onChange={e => setPrefillCardId(e.target.value)}
+              >
+                {cards.length === 0 && <option value=''>No cards</option>}
+                {cards.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.appName || `${c.firstName} ${c.lastName}`}
+                  </option>
+                ))}
+              </select>
+              <button
+                type='button'
+                className='rounded border px-3 py-2 text-sm'
+                onClick={handlePrefill}
+                disabled={!prefillCardId}
+                title='Import title/description/about from this card'
+              >
+                Import
+              </button>
+            </div>
           </div>
         </div>
 
@@ -285,7 +515,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             {...register('title')}
           />
           {errors.title && (
-            <p className='text-sm text-red-600 mt-1'>{errors.title.message}</p>
+            <p className='text-sm text-red-600 mt-1'>
+              {errors.title.message as any}
+            </p>
           )}
         </div>
 
@@ -304,6 +536,111 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
           )}
         </div>
 
+        {/* === About (from card or manual) === */}
+        <div className='rounded-lg border p-4 space-y-4'>
+          <h3 className='font-semibold'>About</h3>
+
+          {/* Avatar & Banner uploaders */}
+          <div className='grid md:grid-cols-2 gap-4'>
+            <div>
+              <label className='block text-sm font-medium'>Avatar</label>
+              <ImageUploader
+                label='Avatar'
+                category='portfolio'
+                purpose='avatar'
+                existingKey={watch('about.avatarKey') ?? null}
+                previewUrl={
+                  watch('about.avatarKey')
+                    ? buildPublicUrl(watch('about.avatarKey')) ?? undefined
+                    : undefined
+                }
+                onUploadedAction={k =>
+                  setValue('about.avatarKey', k, {
+                    shouldDirty: true,
+                    shouldTouch: true
+                  })
+                }
+              />
+              <input type='hidden' {...register('about.avatarKey')} />
+            </div>
+
+            <div>
+              <label className='block text-sm font-medium'>Banner</label>
+              <ImageUploader
+                label='Banner'
+                category='portfolio'
+                purpose='banner'
+                existingKey={watch('about.bannerKey') ?? null}
+                previewUrl={
+                  watch('about.bannerKey')
+                    ? buildPublicUrl(watch('about.bannerKey')) ?? undefined
+                    : undefined
+                }
+                onUploadedAction={k =>
+                  setValue('about.bannerKey', k, {
+                    shouldDirty: true,
+                    shouldTouch: true
+                  })
+                }
+              />
+              <input type='hidden' {...register('about.bannerKey')} />
+            </div>
+          </div>
+
+          <div className='grid md:grid-cols-2 gap-3'>
+            <div>
+              <label className='block text-sm'>First name</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.firstName')}
+              />
+            </div>
+            <div>
+              <label className='block text-sm'>Last name</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.lastName')}
+              />
+            </div>
+            <div>
+              <label className='block text-sm'>Role</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.role')}
+              />
+            </div>
+            <div>
+              <label className='block text-sm'>Country</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.country')}
+              />
+            </div>
+            <div className='md:col-span-2'>
+              <label className='block text-sm'>Short bio</label>
+              <textarea
+                className='w-full rounded border px-3 py-2 mt-1'
+                rows={3}
+                {...register('about.shortBio')}
+              />
+            </div>
+            <div>
+              <label className='block text-sm'>Company</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.company')}
+              />
+            </div>
+            <div>
+              <label className='block text-sm'>University</label>
+              <input
+                className='w-full rounded border px-3 py-2 mt-1'
+                {...register('about.university')}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Main image */}
         <div>
           <label className='block text-sm font-medium'>Main Image</label>
@@ -317,7 +654,12 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                 ? buildPublicUrl(watch('mainImageKey')) ?? undefined
                 : undefined
             }
-            onUploadedAction={setMainImageKey}
+            onUploadedAction={k =>
+              setValue('mainImageKey', k, {
+                shouldDirty: true,
+                shouldTouch: true
+              })
+            }
           />
           {errors.mainImageKey && (
             <p className='text-sm text-red-600 mt-1'>
@@ -332,7 +674,7 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             <label className='block text-sm font-medium'>
               Sub Images (max 12)
             </label>
-            {canAddMoreImages && (
+            {(subImages?.length ?? 0) < 12 && (
               <button
                 type='button'
                 className='text-sm underline'
@@ -429,7 +771,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
 
                   {errors.subImages?.[idx] && (
                     <p className='text-xs text-red-600 mt-2'>
-                      Invalid image: {JSON.stringify(errors.subImages[idx])}
+                      Invalid image:{' '}
+                      {safeStringifyErrors(errors.subImages[idx])}
                     </p>
                   )}
                 </div>
@@ -487,7 +830,7 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                 </div>
                 {errors.videoLinks?.[idx] && (
                   <p className='text-xs text-red-600 mt-1'>
-                    {JSON.stringify(errors.videoLinks[idx])}
+                    {safeStringifyErrors(errors.videoLinks[idx])}
                   </p>
                 )}
               </div>
@@ -496,9 +839,7 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
           <button
             type='button'
             className='mt-2 text-sm underline'
-            onClick={() =>
-              appendVideo({ platform: 'TIKTOK', url: '', description: '' })
-            }
+            onClick={() => appendVideo(newVideo())}
           >
             Add Video
           </button>
@@ -516,19 +857,194 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         </div>
       </section>
 
+      {/* ===== Experiences ===== */}
+      <section className='space-y-3'>
+        <div className='flex items-center justify-between'>
+          <h2 className='text-lg font-semibold'>Experience</h2>
+          <button
+            type='button'
+            className='text-sm underline'
+            onClick={() => appendExp(newExp())}
+          >
+            Add Experience
+          </button>
+        </div>
+
+        {experiences.length === 0 && (
+          <p className='text-sm text-gray-600'>No experience yet.</p>
+        )}
+
+        <div className='space-y-4'>
+          {experiences.map((f, i) => (
+            <div key={f.id ?? i} className='rounded border p-4'>
+              <div className='flex justify-between items-center'>
+                <h3 className='font-medium'>Experience #{i + 1}</h3>
+                <button
+                  type='button'
+                  className='text-xs underline text-red-600'
+                  onClick={() => removeExp(i)}
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className='grid md:grid-cols-2 gap-3 mt-2'>
+                <div>
+                  <label className='block text-sm'>Company</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`experiences.${i}.company` as const)}
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm'>Role</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`experiences.${i}.role` as const)}
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm'>Location</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`experiences.${i}.location` as const)}
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-2'>
+                  <div>
+                    <label className='block text-sm'>Start</label>
+                    <input
+                      type='date'
+                      className='w-full rounded border px-3 py-2 mt-1'
+                      {...register(`experiences.${i}.startDate` as const)}
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-sm'>End</label>
+                    <input
+                      type='date'
+                      className='w-full rounded border px-3 py-2 mt-1'
+                      {...register(`experiences.${i}.endDate` as const)}
+                    />
+                  </div>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='checkbox'
+                    {...register(`experiences.${i}.current` as const)}
+                  />
+                  <span className='text-sm'>Current role</span>
+                </div>
+                <div className='md:col-span-2'>
+                  <label className='block text-sm'>Summary</label>
+                  <textarea
+                    rows={3}
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`experiences.${i}.summary` as const)}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== Education ===== */}
+      <section className='space-y-3'>
+        <div className='flex items-center justify-between'>
+          <h2 className='text-lg font-semibold'>Education</h2>
+          <button
+            type='button'
+            className='text-sm underline'
+            onClick={() => appendEdu(newEdu())}
+          >
+            Add Education
+          </button>
+        </div>
+
+        {educations.length === 0 && (
+          <p className='text-sm text-gray-600'>No education yet.</p>
+        )}
+
+        <div className='space-y-4'>
+          {educations.map((f, i) => (
+            <div key={f.id ?? i} className='rounded border p-4'>
+              <div className='flex justify-between items-center'>
+                <h3 className='font-medium'>Education #{i + 1}</h3>
+                <button
+                  type='button'
+                  className='text-xs underline text-red-600'
+                  onClick={() => removeEdu(i)}
+                >
+                  Remove
+                </button>
+              </div>
+
+              <div className='grid md:grid-cols-2 gap-3 mt-2'>
+                <div>
+                  <label className='block text-sm'>School</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`educations.${i}.school` as const)}
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm'>Degree</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`educations.${i}.degree` as const)}
+                  />
+                </div>
+                <div>
+                  <label className='block text-sm'>Field of study</label>
+                  <input
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`educations.${i}.field` as const)}
+                  />
+                </div>
+                <div className='grid grid-cols-2 gap-2'>
+                  <div>
+                    <label className='block text-sm'>Start</label>
+                    <input
+                      type='date'
+                      className='w-full rounded border px-3 py-2 mt-1'
+                      {...register(`educations.${i}.startDate` as const)}
+                    />
+                  </div>
+                  <div>
+                    <label className='block text-sm'>End</label>
+                    <input
+                      type='date'
+                      className='w-full rounded border px-3 py-2 mt-1'
+                      {...register(`educations.${i}.endDate` as const)}
+                    />
+                  </div>
+                </div>
+                <div className='md:col-span-2'>
+                  <label className='block text-sm'>Summary</label>
+                  <textarea
+                    rows={3}
+                    className='w-full rounded border px-3 py-2 mt-1'
+                    {...register(`educations.${i}.summary` as const)}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ===== Projects ===== */}
       <section className='space-y-3'>
         <div className='flex items-center justify-between'>
           <h2 className='text-lg font-semibold'>Projects</h2>
-          {canAddMoreProjects && (
-            <button
-              type='button'
-              className='text-sm underline'
-              onClick={() => appendProject(newProject())}
-            >
-              Add Project
-            </button>
-          )}
+          <button
+            type='button'
+            className='text-sm underline'
+            onClick={() => appendProject(newProject())}
+          >
+            Add Project
+          </button>
         </div>
 
         {projects.length === 0 && (
@@ -630,9 +1146,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                     Project Tags
                   </label>
                   <TagsInput
-                    // @ts-expect-error reuse component signature
                     name={`projects.${pIdx}.tags`}
-                    register={register as any}
+                    register={register}
                   />
                 </div>
 
@@ -667,30 +1182,32 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
 
       {Object.keys(errors).length > 0 && (
         <pre className='mt-4 text-xs text-red-700 bg-red-50 p-2 rounded'>
-          {JSON.stringify(errors, null, 2)}
+          {safeStringifyErrors(errors)}
         </pre>
       )}
     </form>
   );
 }
 
+/* ========== Child components ========== */
+
 function TagsInput({
   name,
   register
 }: {
-  name: any; // 'tags' or `projects.${idx}.tags`
-  register: ReturnType<typeof useForm<PortfolioFormValues>>['register'];
+  name: string;
+  register: UseFormRegister<PortfolioFormValues>;
 }) {
   return (
     <input
       className='mt-1 w-full rounded border px-3 py-2'
       placeholder='e.g. UGC, Beverage, Ramadan'
-      {...register(name, {
+      {...register(name as any, {
         setValueAs: (v: unknown) => {
           if (v && typeof v === 'object' && 'target' in (v as any)) {
             v = (v as any).target?.value;
           }
-          if (Array.isArray(v)) return v;
+          if (Array.isArray(v)) return v as string[];
           if (typeof v === 'string') {
             return v
               .split(',')
@@ -707,9 +1224,9 @@ function TagsInput({
 
 type ProjectImagesProps = {
   pIdx: number;
-  register: ReturnType<typeof useForm<PortfolioFormValues>>['register'];
-  watch: ReturnType<typeof useForm<PortfolioFormValues>>['watch'];
-  setValue: ReturnType<typeof useForm<PortfolioFormValues>>['setValue'];
+  register: UseFormRegister<PortfolioFormValues>;
+  watch: UseFormWatch<PortfolioFormValues>;
+  setValue: UseFormSetValue<PortfolioFormValues>;
   onBatchUploadedForProject: (pIdx: number, keys: string[]) => void;
 };
 
@@ -720,11 +1237,7 @@ function ProjectImages({
   setValue,
   onBatchUploadedForProject
 }: ProjectImagesProps) {
-  const fields = (watch(`projects.${pIdx}.subImages`) ?? []) as {
-    key: string;
-    url: string;
-    sortOrder?: number;
-  }[];
+  const fields = (watch(`projects.${pIdx}.subImages`) ?? []) as SubImageForm[];
   const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || null;
   const buildPublicUrl = (key?: string | null) =>
     key && PUBLIC_BASE ? `${PUBLIC_BASE}/${key}` : null;
@@ -742,7 +1255,7 @@ function ProjectImages({
             type='button'
             className='text-sm underline'
             onClick={() => {
-              const next = [...fields, { key: '', url: '' }];
+              const next = [...fields, { key: '', url: '' } as SubImageForm];
               setValue(`projects.${pIdx}.subImages`, next, {
                 shouldDirty: true,
                 shouldTouch: true
@@ -767,7 +1280,7 @@ function ProjectImages({
       </div>
 
       <div className='mt-3 grid grid-cols-1 gap-3 md:grid-cols-2'>
-        {(fields ?? []).map((_, idx: number) => {
+        {(fields ?? []).map((_item, idx: number) => {
           const key = watch(`projects.${pIdx}.subImages.${idx}.key`);
           const url = watch(`projects.${pIdx}.subImages.${idx}.url`);
           const previewUrl = key
@@ -782,11 +1295,8 @@ function ProjectImages({
                   type='button'
                   className='text-xs underline'
                   onClick={() => {
-                    const cur = (watch(`projects.${pIdx}.subImages`) ?? []) as {
-                      key: string;
-                      url: string;
-                      sortOrder?: number;
-                    }[];
+                    const cur = (watch(`projects.${pIdx}.subImages`) ??
+                      []) as SubImageForm[];
                     const next = [...cur.slice(0, idx), ...cur.slice(idx + 1)];
                     setValue(`projects.${pIdx}.subImages`, next, {
                       shouldDirty: true,
@@ -843,90 +1353,64 @@ function ProjectImages({
 
 type ProjectVideosProps = {
   pIdx: number;
-  register: ReturnType<typeof useForm<PortfolioFormValues>>['register'];
-  control: ReturnType<typeof useForm<PortfolioFormValues>>['control'];
+  register: UseFormRegister<PortfolioFormValues>;
+  control: Control<PortfolioFormValues>;
 };
 
 function ProjectVideos({ pIdx, register, control }: ProjectVideosProps) {
   const nameBase = `projects.${pIdx}.videoLinks` as const;
+  const { fields, append, remove } = useFieldArray({ control, name: nameBase });
+
   return (
     <div className='mt-4'>
       <label className='block text-sm font-medium'>Project Video Links</label>
-      <ProjectVideoList
-        pIdx={pIdx}
-        nameBase={nameBase}
-        register={register}
-        control={control}
-      />
-    </div>
-  );
-}
-
-type ProjectVideoListProps = {
-  pIdx: number;
-  nameBase: `projects.${number}.videoLinks`;
-  register: ReturnType<typeof useForm<PortfolioFormValues>>['register'];
-  control: ReturnType<typeof useForm<PortfolioFormValues>>['control'];
-};
-
-function ProjectVideoList({
-  pIdx,
-  nameBase,
-  register,
-  control
-}: ProjectVideoListProps) {
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: nameBase
-  });
-
-  return (
-    <div className='space-y-3 mt-2'>
-      {fields.map((f, idx) => (
-        <div key={f.id ?? idx} className='rounded border p-3'>
-          <div className='flex items-center justify-between'>
-            <span className='text-sm font-medium'>Video #{idx + 1}</span>
-            <button
-              type='button'
-              className='text-xs underline'
-              onClick={() => remove(idx)}
-            >
-              Remove
-            </button>
-          </div>
-          <div className='mt-2 grid grid-cols-1 md:grid-cols-5 gap-2'>
-            <div>
-              <label className='block text-xs'>Platform</label>
-              <select
-                className='w-full rounded border px-2 py-1'
-                {...register(`${nameBase}.${idx}.platform` as const)}
+      <div className='space-y-3 mt-2'>
+        {fields.map((f, idx) => (
+          <div key={f.id ?? idx} className='rounded border p-3'>
+            <div className='flex items-center justify-between'>
+              <span className='text-sm font-medium'>Video #{idx + 1}</span>
+              <button
+                type='button'
+                className='text-xs underline'
+                onClick={() => remove(idx)}
               >
-                {VIDEO_PLATFORMS.map((p: string) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+                Remove
+              </button>
             </div>
-            <div className='md:col-span-2'>
-              <label className='block text-xs'>URL</label>
-              <input
-                className='w-full rounded border px-2 py-1'
-                placeholder='https://...'
-                {...register(`${nameBase}.${idx}.url` as const)}
-              />
-            </div>
-            <div className='md:col-span-2'>
-              <label className='block text-xs'>Caption</label>
-              <input
-                className='w-full rounded border px-2 py-1'
-                placeholder='Short description'
-                {...register(`${nameBase}.${idx}.description` as const)}
-              />
+            <div className='mt-2 grid grid-cols-1 md:grid-cols-5 gap-2'>
+              <div>
+                <label className='block text-xs'>Platform</label>
+                <select
+                  className='w-full rounded border px-2 py-1'
+                  {...register(`${nameBase}.${idx}.platform` as const)}
+                >
+                  {VIDEO_PLATFORMS.map((p: string) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className='md:col-span-2'>
+                <label className='block text-xs'>URL</label>
+                <input
+                  className='w-full rounded border px-2 py-1'
+                  placeholder='https://...'
+                  {...register(`${nameBase}.${idx}.url` as const)}
+                />
+              </div>
+              <div className='md:col-span-2'>
+                <label className='block text-xs'>Caption</label>
+                <input
+                  className='w-full rounded border px-2 py-1'
+                  placeholder='Short description'
+                  {...register(`${nameBase}.${idx}.description` as const)}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
       <button
         type='button'
