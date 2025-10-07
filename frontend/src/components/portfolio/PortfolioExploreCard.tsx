@@ -1,18 +1,36 @@
+// src/components/portfolio/PortfolioExploreCard.tsx
 'use client';
 
 import Link from 'next/link';
 import type { Portfolio } from '@/types/portfolio';
 
-const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || null;
-const buildPublicUrl = (key?: string | null) =>
+const PUBLIC_BASE: string | null = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || null;
+const buildPublicUrl = (key?: string | null): string | null =>
   key && PUBLIC_BASE ? `${PUBLIC_BASE}/${key}` : null;
+
+// Type guards to avoid `any`
+function hasIsOwner(p: unknown): p is { isOwner?: boolean } {
+  return typeof p === 'object' && p !== null && 'isOwner' in p;
+}
+function hasAboutRole(p: unknown): p is { about?: { role?: string } } {
+  if (typeof p !== 'object' || p === null) return false;
+  const anyP = p as Record<string, unknown>;
+  if (!('about' in anyP)) return false;
+  const about = anyP.about as unknown;
+  return (
+    typeof about === 'object' &&
+    about !== null &&
+    ('role' in (about as Record<string, unknown>) ||
+      (about as Record<string, unknown>).role === undefined)
+  );
+}
 
 export default function PortfolioExploreCard({
   portfolio
 }: {
   portfolio: Portfolio | undefined | null;
 }) {
-  if (!portfolio) return null; // guard against undefined
+  if (!portfolio) return null; // guard against undefined/null
 
   const mainKey = portfolio.mainImageKey ?? null;
 
@@ -28,7 +46,9 @@ export default function PortfolioExploreCard({
     (firstSub?.key ? buildPublicUrl(firstSub.key) : null);
 
   // Some public list endpoints may not send isOwner; default to false
-  const isOwner = (portfolio as any)?.isOwner === true;
+  const isOwner = hasIsOwner(portfolio) && portfolio.isOwner === true;
+
+  const aboutRole = hasAboutRole(portfolio) ? portfolio.about?.role : undefined;
 
   return (
     <div className='rounded-xl border overflow-hidden bg-white'>
@@ -47,9 +67,9 @@ export default function PortfolioExploreCard({
           {portfolio.title || 'Untitled'}
         </h3>
 
-        {(portfolio as any)?.about?.role && (
+        {aboutRole && (
           <p className='text-xs text-neutral-600 mt-1 line-clamp-1'>
-            {(portfolio as any).about.role}
+            {aboutRole}
           </p>
         )}
 
@@ -57,10 +77,10 @@ export default function PortfolioExploreCard({
           <div className='mt-2 flex flex-wrap gap-1'>
             {portfolio.tags.slice(0, 4).map((tag, i) => (
               <span
-                key={`${tag}-${i}`}
+                key={`${String(tag)}-${i}`}
                 className='text-[11px] px-2 py-0.5 rounded-full bg-neutral-100'
               >
-                {tag}
+                {String(tag)}
               </span>
             ))}
           </div>

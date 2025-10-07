@@ -1,9 +1,16 @@
 // app/portfolio/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import { api, HttpError } from '@/lib/api';
+import type { Portfolio } from '@/types/portfolio';
 
 type PageProps = { params: Promise<{ slug: string }> };
 export const dynamic = 'force-dynamic';
+
+type SubImage = NonNullable<Portfolio['subImages']>[number];
+type Project = NonNullable<Portfolio['projects']>[number];
+type Experience = NonNullable<Portfolio['experiences']>[number];
+type Education = NonNullable<Portfolio['educations']>[number];
+type ProjectSubImage = NonNullable<Project['subImages']>[number];
 
 export default async function PublicPortfolioPage({ params }: PageProps) {
   const { slug } = await params;
@@ -15,10 +22,10 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
     const urlFor = (key?: string | null) =>
       key && PUBLIC_BASE ? `${PUBLIC_BASE}/${key}` : null;
 
-    const subImages = p.subImages ?? [];
-    const projects = p.projects ?? [];
-    const exps = p.experiences ?? [];
-    const edus = p.educations ?? [];
+    const subImages: SubImage[] = p.subImages ?? [];
+    const projects: Project[] = p.projects ?? [];
+    const exps: Experience[] = p.experiences ?? [];
+    const edus: Education[] = p.educations ?? [];
 
     return (
       <div className='max-w-5xl mx-auto p-6 text-neutral-900 dark:text-neutral-100'>
@@ -83,7 +90,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
           <section className='mt-8'>
             <h2 className='text-xl font-semibold mb-3'>Gallery</h2>
             <div className='grid sm:grid-cols-2 md:grid-cols-3 gap-3'>
-              {subImages.map((img: any, idx: number) => (
+              {subImages.map((img: SubImage, idx: number) => (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={img.id ?? idx}
@@ -100,7 +107,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
           <section className='mt-10'>
             <h2 className='text-2xl font-semibold mb-3'>Experience</h2>
             <div className='space-y-3'>
-              {exps.map((e: any) => (
+              {exps.map((e: Experience) => (
                 <div
                   key={e.id}
                   className='rounded border p-4 border-neutral-200 dark:border-neutral-700'
@@ -126,7 +133,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
           <section className='mt-10'>
             <h2 className='text-2xl font-semibold mb-3'>Education</h2>
             <div className='space-y-3'>
-              {edus.map((ed: any) => (
+              {edus.map((ed: Education) => (
                 <div
                   key={ed.id}
                   className='rounded border p-4 border-neutral-200 dark:border-neutral-700'
@@ -159,8 +166,8 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
           <section className='mt-10'>
             <h2 className='text-2xl font-semibold mb-4'>Projects</h2>
             <div className='space-y-6'>
-              {projects.map((proj: any, i: number) => {
-                const pSub = (proj.subImages ?? []) as any[];
+              {projects.map((proj: Project, i: number) => {
+                const pSub: Project['subImages'] = proj.subImages ?? [];
                 return (
                   <article
                     key={proj.id ?? i}
@@ -185,7 +192,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
 
                     {pSub.length > 0 && (
                       <div className='mt-3 grid sm:grid-cols-2 md:grid-cols-3 gap-3'>
-                        {pSub.map((img, idx2) => (
+                        {pSub.map((img: ProjectSubImage, idx2: number) => (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             key={img.id ?? idx2}

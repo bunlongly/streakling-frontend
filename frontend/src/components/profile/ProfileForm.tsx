@@ -24,7 +24,28 @@ function previewFromKey(key?: string | null) {
   return null; // neither configured → show "No image"
 }
 
+// Helper: some owner-only fields are optional/nullable on the response
+type OwnerFields = Partial<{
+  email: string | null;
+  country: string | null;
+  religion: string | null;
+  dateOfBirth: string | null;
+  phone: string | null;
+}>;
+
+// Helper: safe error -> message (no `any`)
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return 'Failed to update profile';
+}
+
 export default function ProfileForm({ initial }: { initial: PublicProfile }) {
+  const initialWithOwner = initial as PublicProfile & OwnerFields;
+
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -39,7 +60,7 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
     (initial.industries || []).map(i => i.slug)
   );
 
-  // optional helper input: comma-separated editing UX (keeps IndustriesInput untouched)
+  // optional helper input: comma-separated editing UX
   const [industriesText, setIndustriesText] = useState(industries.join(', '));
 
   // keep helper text <-> array in sync
@@ -57,22 +78,27 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
     () => ({
       username: initial.username ?? '',
       displayName: initial.displayName ?? '',
-      email: (initial as any).email ?? '',
-      country: (initial as any).country ?? '',
-      religion: (initial as any).religion ?? '',
-      dateOfBirth: (initial as any).dateOfBirth?.slice(0, 10) ?? '',
-      phone: (initial as any).phone ?? '',
+      email: initialWithOwner.email ?? '',
+      country: initialWithOwner.country ?? '',
+      religion: initialWithOwner.religion ?? '',
+      dateOfBirth: initialWithOwner.dateOfBirth?.slice(0, 10) ?? '',
+      phone: initialWithOwner.phone ?? '',
+
+      // media
       avatarKey,
       bannerKey,
+
+      // flags
       showEmail: initial.showEmail ?? false,
       showReligion: initial.showReligion ?? false,
       showDateOfBirth: initial.showDateOfBirth ?? false,
       showPhone: initial.showPhone ?? false,
       showCountry: initial.showCountry ?? true,
-      industries // RHF value is unused (we send from local state on submit), but keep for completeness
+
+      // industries (RHF mirror)
+      industries
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [initial, avatarKey, bannerKey, industries]
+    [initial, initialWithOwner, avatarKey, bannerKey, industries]
   );
 
   const {
@@ -86,7 +112,7 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
     defaultValues: defaults
   });
 
-  // IMPORTANT: hydrate the form when `initial` or local state changes
+  // IMPORTANT: hydrate the form when `defaults` change
   useEffect(() => {
     reset(defaults);
   }, [defaults, reset]);
@@ -125,33 +151,33 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
       };
 
       const res = await api.profile.update(payload);
-      const updated = res.data;
+      const updated = res.data as PublicProfile & OwnerFields;
 
       // reflect server truth in local state
-      setAvatarKey((updated as any).avatarKey ?? null);
-      setBannerKey((updated as any).bannerKey ?? null);
-      setIndustries((updated.industries || []).map((i: any) => i.slug));
+      setAvatarKey(updated.avatarKey ?? null);
+      setBannerKey(updated.bannerKey ?? null);
+      setIndustries((updated.industries || []).map(i => i.slug));
 
       // reset the form with fresh values so fields show the saved data
       reset({
         username: updated.username ?? '',
         displayName: updated.displayName ?? '',
-        email: (updated as any).email ?? '',
-        country: (updated as any).country ?? '',
-        religion: (updated as any).religion ?? '',
-        dateOfBirth: (updated as any).dateOfBirth?.slice(0, 10) ?? '',
-        phone: (updated as any).phone ?? '',
-        avatarKey: (updated as any).avatarKey ?? null,
-        bannerKey: (updated as any).bannerKey ?? null,
+        email: updated.email ?? '',
+        country: updated.country ?? '',
+        religion: updated.religion ?? '',
+        dateOfBirth: updated.dateOfBirth?.slice(0, 10) ?? '',
+        phone: updated.phone ?? '',
+        avatarKey: updated.avatarKey ?? null,
+        bannerKey: updated.bannerKey ?? null,
         showEmail: updated.showEmail ?? false,
         showReligion: updated.showReligion ?? false,
         showDateOfBirth: updated.showDateOfBirth ?? false,
         showPhone: updated.showPhone ?? false,
         showCountry: updated.showCountry ?? true,
-        industries: (updated.industries || []).map((i: any) => i.slug)
+        industries: (updated.industries || []).map(i => i.slug)
       });
-    } catch (e: any) {
-      setServerError(e?.message ?? 'Failed to update profile');
+    } catch (e: unknown) {
+      setServerError(getErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -232,7 +258,7 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
         </div>
         <div>
           <label className='block text-sm font-medium'>Date of birth</label>
-          <input
+        <input
             type='date'
             {...register('dateOfBirth')}
             className='w-full rounded-xl border px-3 py-2'

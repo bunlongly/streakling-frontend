@@ -2,21 +2,32 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Image from 'next/image';
 import { api } from '@/lib/api';
 
 type Props = {
   label: string;
   purpose: 'avatar' | 'banner';
   value?: string | null; // current key
-  onChange?: (key: string | null) => void;
+  onChangeAction?: (key: string | null) => void; // renamed for Next rule
   previewUrl?: string | null; // built URL from key
 };
+
+// safe error → message
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return 'Upload failed';
+}
 
 export default function ProfileImagePicker({
   label,
   purpose,
   value,
-  onChange,
+  onChangeAction,
   previewUrl
 }: Props) {
   const [busy, setBusy] = useState(false);
@@ -58,9 +69,9 @@ export default function ProfileImagePicker({
         throw new Error(`Upload failed: ${put.status} ${put.statusText}`);
       }
 
-      onChange?.(key);
-    } catch (e: any) {
-      setErr(e?.message ?? 'Upload failed');
+      onChangeAction?.(key);
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -86,7 +97,7 @@ export default function ProfileImagePicker({
             type='button'
             onClick={() => {
               setLocalPreview(null);
-              onChange?.(null);
+              onChangeAction?.(null);
             }}
             className='px-3 py-1 rounded-xl bg-gray-100 hover:bg-gray-200 text-sm'
           >
@@ -96,9 +107,11 @@ export default function ProfileImagePicker({
       </div>
 
       {shownPreview ? (
-        <img
+        <Image
           src={shownPreview}
           alt={label}
+          width={192}
+          height={192}
           className='h-24 w-auto rounded-xl object-cover border'
         />
       ) : null}

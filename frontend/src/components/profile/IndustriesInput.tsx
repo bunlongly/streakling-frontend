@@ -51,7 +51,7 @@ export default function IndustriesInput({
         className='w-full rounded-xl border px-3 py-2 text-sm'
       />
       <p className='text-xs text-gray-500'>
-        Separate with commas. We’ll normalize to slugs.
+        Separate with commas. We will normalize to slugs.
       </p>
     </div>
   );

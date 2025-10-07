@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
-import { api } from '@/lib/api';
+import { api, HttpError } from '@/lib/api';
 import type { PublicProfile } from '@/types/profile';
 import ProfileForm from '@/components/profile/ProfileForm';
 import { useAuth } from '@clerk/nextjs';
@@ -27,23 +27,33 @@ export default function EditProfileClientPage() {
 
     (async () => {
       try {
-        const res = await api.profile.get({ headers: { 'cache-control': 'no-cache' } });
+        const res = await api.profile.get({
+          headers: { 'cache-control': 'no-cache' }
+        });
         setProfile(res.data);
-      } catch (e: any) {
-        setErr(e?.message ?? 'Failed to load profile');
+      } catch (e: unknown) {
+        // type-safe error handling
+        const msg =
+          e instanceof HttpError
+            ? e.message
+            : e instanceof Error
+            ? e.message
+            : 'Failed to load profile';
+        setErr(msg);
       }
     })();
   }, [isLoaded, isSignedIn, synced, router]);
 
-  if (!isLoaded || !synced) return <div className="p-6">Preparing your session…</div>;
-  if (err) return <div className="p-6 text-red-600">{err}</div>;
-  if (!profile) return <div className="p-6">Loading…</div>;
+  if (!isLoaded || !synced)
+    return <div className='p-6'>Preparing your session…</div>;
+  if (err) return <div className='p-6 text-red-600'>{err}</div>;
+  if (!profile) return <div className='p-6'>Loading…</div>;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Edit Profile</h1>
-        <Link href="/profile" className="px-3 py-1.5 rounded-lg border">
+    <div className='max-w-3xl mx-auto px-4 py-8 space-y-6'>
+      <div className='flex items-center justify-between'>
+        <h1 className='text-2xl font-semibold'>Edit Profile</h1>
+        <Link href='/profile' className='px-3 py-1.5 rounded-lg border'>
           Back
         </Link>
       </div>

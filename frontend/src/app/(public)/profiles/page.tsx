@@ -1,3 +1,4 @@
+// src/app/(public)/profiles/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -10,6 +11,16 @@ function avatarFrom(profile: PublicProfile) {
   if (profile.avatarKey && PUBLIC_BASE)
     return `${PUBLIC_BASE}/${profile.avatarKey}`;
   return profile.avatarUrl ?? null;
+}
+
+// Type-safe error -> message helper (no `any`)
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return 'Failed to load profiles';
 }
 
 export default function PublicProfilesPage() {
@@ -30,14 +41,15 @@ export default function PublicProfilesPage() {
       });
       setItems(prev => (reset ? res.data.items : [...prev, ...res.data.items]));
       setNextCursor(res.data.nextCursor);
-    } catch (e: any) {
-      setErr(e?.message ?? 'Failed to load profiles');
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    // initial load
     load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -48,7 +60,7 @@ export default function PublicProfilesPage() {
     <div className='max-w-6xl mx-auto px-4 py-8 space-y-6'>
       <h1 className='text-2xl font-semibold'>People</h1>
 
-      {/* NOT A <form> → no native POST */}
+      {/* NOT a <form> → no accidental POST */}
       <div className='flex gap-3'>
         <input
           value={q}
@@ -65,9 +77,10 @@ export default function PublicProfilesPage() {
         <button
           type='button'
           onClick={triggerSearch}
+          disabled={loading}
           className='px-3 py-2 rounded-xl border'
         >
-          Search
+          {loading ? 'Searching…' : 'Search'}
         </button>
       </div>
 
@@ -77,8 +90,9 @@ export default function PublicProfilesPage() {
         {items.map(p => {
           const avatar = avatarFrom(p);
           const href = p.username
-            ? `/u/${encodeURIComponent(p.username)}`
-            : `/u/id/${p.id}`;
+            ? `/profile/${encodeURIComponent(p.username)}`
+            : `/profile/id/${p.id}`;
+
           return (
             <Link
               key={`${p.id}-${p.username ?? 'nou'}`}
@@ -103,6 +117,7 @@ export default function PublicProfilesPage() {
                   </div>
                 </div>
               </div>
+
               <div className='mt-3 text-xs text-gray-600'>
                 {p.industries.length
                   ? p.industries.map(i => i.name || i.slug).join(', ')

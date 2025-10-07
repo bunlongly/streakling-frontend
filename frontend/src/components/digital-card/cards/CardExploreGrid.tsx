@@ -12,7 +12,7 @@ type PageState = {
   q: string;
   isLoading: boolean;
   isLoadingMore: boolean;
-  error?: string | null;
+  error: string | null;
 };
 
 export default function CardExploreGrid() {
@@ -35,16 +35,18 @@ export default function CardExploreGrid() {
         nextCursor: r.data.nextCursor,
         isLoading: false
       }));
-    } catch (e: any) {
+    } catch (e) {
+      const err = e as Error;
       setState(s => ({
         ...s,
         isLoading: false,
-        error: e?.message || 'Failed to load cards'
+        error: err.message || 'Failed to load cards'
       }));
     }
   }, []);
 
   const loadMore = useCallback(async () => {
+    setState(s => s); // no-op to capture latest state
     if (!state.nextCursor || state.isLoadingMore) return;
     setState(s => ({ ...s, isLoadingMore: true, error: null }));
     try {
@@ -59,11 +61,12 @@ export default function CardExploreGrid() {
         nextCursor: r.data.nextCursor,
         isLoadingMore: false
       }));
-    } catch (e: any) {
+    } catch (e) {
+      const err = e as Error;
       setState(s => ({
         ...s,
         isLoadingMore: false,
-        error: e?.message || 'Failed to load more'
+        error: err.message || 'Failed to load more'
       }));
     }
   }, [state.nextCursor, state.isLoadingMore, state.q]);
@@ -82,46 +85,51 @@ export default function CardExploreGrid() {
     return () => clearTimeout(t);
   }, [query, fetchInitial]);
 
-  const onDelete = useCallback(async (id: string) => {
-    // Optional: only owners will even see this button, backend still checks ownership.
-    // After deletion, refetch initial.
-    await api.card.deleteById(id);
-    await fetchInitial(state.q);
-  }, [fetchInitial, state.q]);
+  const onDeleteAction = useCallback(
+    async (id: string) => {
+      await api.card.deleteById(id);
+      await fetchInitial(state.q);
+    },
+    [fetchInitial, state.q]
+  );
 
   const hasItems = state.items.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className='space-y-6'>
       {/* Header + Search */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Digital Cards</h1>
+      <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>
+        <h1 className='text-2xl font-semibold'>Digital Cards</h1>
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search name, role, app name…"
-          className="w-full md:w-96 rounded border px-3 py-2"
+          placeholder='Search name, role, app name…'
+          className='w-full md:w-96 rounded border px-3 py-2'
         />
       </div>
 
       {state.isLoading ? (
-        <div className="text-sm text-gray-600">Loading…</div>
+        <div className='text-sm text-gray-600'>Loading…</div>
       ) : state.error ? (
-        <div className="text-sm text-red-600">{state.error}</div>
+        <div className='text-sm text-red-600'>{state.error}</div>
       ) : !hasItems ? (
-        <div className="text-sm text-gray-600">No published cards found.</div>
+        <div className='text-sm text-gray-600'>No published cards found.</div>
       ) : (
         <>
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className='grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
             {state.items.map(card => (
-              <PublicCardItem key={card.id} card={card} onDelete={onDelete} />
+              <PublicCardItem
+                key={card.id}
+                card={card}
+                onDeleteAction={onDeleteAction}
+              />
             ))}
           </div>
 
           {state.nextCursor ? (
-            <div className="pt-4">
+            <div className='pt-4'>
               <button
-                className="rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
+                className='rounded border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-60'
                 disabled={state.isLoadingMore}
                 onClick={loadMore}
               >
