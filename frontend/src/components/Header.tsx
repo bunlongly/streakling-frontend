@@ -8,6 +8,8 @@ const navItems = [
   { href: '/', label: 'Home' },
   { href: '/profile/digitalcard', label: 'Explore Digital card' },
   { href: '/profile/portfolio', label: 'Explore Portfolio' },
+  { href: '/profiles', label: 'People' },
+  { href: '/profile', label: 'My Profile', auth: 'signed-in' },
   { href: '/profile/cards', label: 'My Cards' }, // list
   { href: '/profile/cards/create', label: 'Create Card' }, // create
   { href: '/profile/portfolios', label: 'My Portfolios' },

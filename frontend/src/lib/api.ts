@@ -13,6 +13,7 @@ import type {
   UpdatePortfolioInput,
   PortfolioPublicList
 } from '@/types/portfolio';
+import type { PublicProfile, UpdateMyProfileInput } from '@/types/profile';
 
 export const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL;
 if (!API_BASE) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
@@ -80,7 +81,7 @@ class HttpClient {
 
     const res = await fetch(url, {
       method,
-      credentials: 'include', // include cookies
+      credentials: 'include', // CRITICAL: include cookies for session
       ...init,
       headers: {
         ...(isJsonBody ? { 'Content-Type': 'application/json' } : {}),
@@ -99,7 +100,6 @@ class HttpClient {
       throw new HttpError(res.status, message, parsed);
     }
 
-    // Assume the caller provides the correct T; we avoid `any`
     return parsed as T;
   }
 
@@ -120,6 +120,35 @@ class HttpClient {
 export const http = new HttpClient(API_BASE);
 
 /* ================== Feature APIs ================== */
+
+// ---- Profile ----
+export const apiProfile = {
+  get: (init?: RequestInitExtra) =>
+    http.get<ApiSuccess<PublicProfile>>('/api/profile', init),
+
+  update: (payload: UpdateMyProfileInput) =>
+    http.patch<ApiSuccess<PublicProfile>>('/api/profile', payload),
+
+  publicGetByUsername: (username: string, init?: RequestInitExtra) =>
+    http.get<ApiSuccess<PublicProfile>>(
+      `/api/u/${encodeURIComponent(username)}`,
+      init
+    ),
+
+
+  listPublic: (params?: { q?: string; limit?: number; cursor?: string }) =>
+    http.get<ApiSuccess<{ items: PublicProfile[]; nextCursor: string | null }>>(
+      '/api/profiles/public',
+      { query: params }
+    ),
+
+
+  publicGetById: (id: string, init?: RequestInitExtra) =>
+    http.get<ApiSuccess<PublicProfile>>(
+      `/api/u/id/${encodeURIComponent(id)}`,
+      init
+    )
+};
 
 // ---- Session (Clerk token -> backend cookie) ----
 export const apiSession = {
@@ -167,20 +196,22 @@ export const apiCard = {
       `/api/digital-name-cards/${id}`,
       payload
     ),
+
   deleteById: (id: string) =>
     http.delete<ApiSuccess<{ id: string }>>(`/api/digital-name-cards/${id}`)
 };
 
+// ---- Portfolios ----
 export const apiPortfolio = {
   listPublic: (params?: { limit?: number; cursor?: string }) =>
     http.get<ApiSuccess<PortfolioPublicList>>('/api/portfolios/public', {
       query: params
     }),
 
-  listMine: (init?: any) =>
+  listMine: (init?: RequestInitExtra) =>
     http.get<ApiSuccess<Portfolio[]>>('/api/portfolios', init),
 
-  getById: (id: string, init?: any) =>
+  getById: (id: string, init?: RequestInitExtra) =>
     http.get<ApiSuccess<Portfolio>>(`/api/portfolios/${id}`, init),
 
   create: (payload: CreatePortfolioInput) =>
@@ -197,7 +228,7 @@ export const apiPortfolio = {
       `/api/portfolios/slug/${encodeURIComponent(slug)}`
     ),
 
-  /** NEW: get default form values copied from a card you own (title/description/about) */
+  /** Copy some defaults from a card the user owns */
   prefillFromCard: (cardId: string) =>
     http.get<
       ApiSuccess<{
@@ -219,18 +250,19 @@ export const apiPortfolio = {
 };
 
 // ---- Upload signing ----
+// Match your backend sign response: { key, uploadUrl, url }
 export type SignUploadInput = {
   category: 'digitalcard' | 'portfolio' | 'profile';
-  purpose?: string; // e.g. 'avatar' | 'banner'
-  ext: string; // 'png' | 'jpg' | 'webp'
+  purpose?: string; // 'avatar' | 'banner' | 'cover' | 'media'
+  ext: string; // 'png' | 'jpg' | 'webp' | ...
   contentType: string; // 'image/png', ...
   sizeBytes: number;
 };
-
 export type SignUploadResponse = {
   key: string;
   uploadUrl: string;
-  expiresInSec: number;
+  url: string; // final public URL (if bucket is public)
+  // expiresInSec?: number; // optional if you add it later
 };
 
 export const apiUploads = {
@@ -238,12 +270,13 @@ export const apiUploads = {
     http.post<ApiSuccess<SignUploadResponse>>('/api/uploads/sign', payload)
 };
 
-// Grouped export
+// ---- Grouped export ----
 export const api = {
   session: apiSession,
   card: apiCard,
-  portfolio: apiPortfolio, // 👈 added
-  uploads: apiUploads
+  portfolio: apiPortfolio,
+  uploads: apiUploads,
+  profile: apiProfile
 };
 
 // Re-export types for convenience
@@ -254,5 +287,7 @@ export type {
   CardStatus,
   Portfolio,
   CreatePortfolioInput,
-  UpdatePortfolioInput
+  UpdatePortfolioInput,
+  PublicProfile,
+  UpdateMyProfileInput
 };
