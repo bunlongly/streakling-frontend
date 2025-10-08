@@ -14,6 +14,14 @@ import type {
   PortfolioPublicList
 } from '@/types/portfolio';
 import type { PublicProfile, UpdateMyProfileInput } from '@/types/profile';
+import type {
+  Challenge,
+  ChallengePublicList,
+  CreateChallengeInput,
+  UpdateChallengeInput,
+  ChallengeSubmission,
+  CreateSubmissionInput
+} from '@/types/challenge';
 
 export const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL;
 if (!API_BASE) throw new Error('NEXT_PUBLIC_BACKEND_URL is not set');
@@ -135,13 +143,11 @@ export const apiProfile = {
       init
     ),
 
-
   listPublic: (params?: { q?: string; limit?: number; cursor?: string }) =>
     http.get<ApiSuccess<{ items: PublicProfile[]; nextCursor: string | null }>>(
       '/api/profiles/public',
       { query: params }
     ),
-
 
   publicGetById: (id: string, init?: RequestInitExtra) =>
     http.get<ApiSuccess<PublicProfile>>(
@@ -249,10 +255,97 @@ export const apiPortfolio = {
     >(`/api/portfolios/prefill-from-card/${encodeURIComponent(cardId)}`)
 };
 
+// ---- Challenges ----
+export const apiChallenge = {
+  // public browsing
+  listPublic: (params?: { limit?: number; cursor?: string; q?: string }) =>
+    http.get<ApiSuccess<ChallengePublicList>>('/api/challenges/public', {
+      query: params
+    }),
+
+  publicGetBySlug: (slug: string) =>
+    http.get<ApiSuccess<Challenge>>(
+      `/api/challenges/slug/${encodeURIComponent(slug)}`
+    ),
+
+  // mine
+  listMine: (init?: RequestInitExtra) =>
+    http.get<ApiSuccess<Challenge[]>>('/api/challenges', init),
+
+  create: (payload: CreateChallengeInput) =>
+    http.post<ApiSuccess<Challenge>>('/api/challenges', payload),
+
+  getById: (id: string, init?: RequestInitExtra) =>
+    http.get<ApiSuccess<Challenge>>(
+      `/api/challenges/${encodeURIComponent(id)}`,
+      init
+    ),
+
+  updateById: (id: string, payload: UpdateChallengeInput) =>
+    http.patch<ApiSuccess<Challenge>>(
+      `/api/challenges/${encodeURIComponent(id)}`,
+      payload
+    ),
+
+  deleteById: (id: string) =>
+    http.delete<ApiSuccess<{ deleted: boolean }>>(
+      `/api/challenges/${encodeURIComponent(id)}`
+    ),
+
+  // submissions
+  /** Public ordered list (paginated) */
+  listSubmissions: (id: string, params?: { limit?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: ChallengeSubmission[];
+        nextCursor: string | null;
+      }>
+    >(`/api/challenges/${encodeURIComponent(id)}/submissions`, {
+      query: params
+    }),
+
+  /** Create my submission */
+  createSubmission: (id: string, payload: CreateSubmissionInput) =>
+    http.post<ApiSuccess<ChallengeSubmission>>(
+      `/api/challenges/${encodeURIComponent(id)}/submissions`,
+      payload
+    ),
+
+  /** Get my submission for this challenge (may be null) */
+  getMySubmission: (id: string) =>
+    http.get<ApiSuccess<ChallengeSubmission | null>>(
+      `/api/challenges/${encodeURIComponent(id)}/submissions`,
+      { query: { mine: 1 } }
+    ),
+
+  /** Withdraw my submission for this challenge */
+  withdrawSubmission: (id: string) =>
+    http.delete<ApiSuccess<{ deleted: boolean }>>(
+      `/api/challenges/${encodeURIComponent(id)}/submissions`
+    ),
+
+  /** List all my submissions across challenges */
+  listMySubmissions: () =>
+    http.get<ApiSuccess<ChallengeSubmission[]>>('/api/submissions'),
+
+  /** 🔧 Owner moderates a submission’s status */
+  updateSubmissionStatus: (
+    challengeId: string,
+    submissionId: string,
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'WINNER'
+  ) =>
+    http.patch<ApiSuccess<ChallengeSubmission>>(
+      `/api/challenges/${encodeURIComponent(
+        challengeId
+      )}/submissions/${encodeURIComponent(submissionId)}/status`,
+      { status }
+    )
+};
+
 // ---- Upload signing ----
 // Match your backend sign response: { key, uploadUrl, url }
 export type SignUploadInput = {
-  category: 'digitalcard' | 'portfolio' | 'profile';
+  category: 'digitalcard' | 'portfolio' | 'profile' | 'challenge';
   purpose?: string; // 'avatar' | 'banner' | 'cover' | 'media'
   ext: string; // 'png' | 'jpg' | 'webp' | ...
   contentType: string; // 'image/png', ...
@@ -276,7 +369,8 @@ export const api = {
   card: apiCard,
   portfolio: apiPortfolio,
   uploads: apiUploads,
-  profile: apiProfile
+  profile: apiProfile,
+  challenge: apiChallenge
 };
 
 // Re-export types for convenience
@@ -289,5 +383,11 @@ export type {
   CreatePortfolioInput,
   UpdatePortfolioInput,
   PublicProfile,
-  UpdateMyProfileInput
+  UpdateMyProfileInput,
+  Challenge,
+  ChallengePublicList,
+  CreateChallengeInput,
+  UpdateChallengeInput,
+  ChallengeSubmission,
+  CreateSubmissionInput
 };
