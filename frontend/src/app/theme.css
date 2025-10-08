@@ -2,8 +2,7 @@
 
 /* === Your tokens (kept) === */
 @theme theme {
-  --font-sans: var(--font-montserrat), system-ui, sans-serif;
-  --font-display: var(--font-display, Georgia), serif; /* NEW: display serif */
+  --font-sans: var(--font-sans), system-ui, sans-serif;
   --color-primary: #9e55f7;
   --color-secondary: #447aee;
   --color-tertiary: #13b9a3;
@@ -17,8 +16,7 @@
   --color-danger: #ef4444;
 }
 @theme light {
-  --font-sans: var(--font-montserrat), system-ui, sans-serif;
-  --font-display: var(--font-display, Georgia), serif;
+  --font-sans: var(--font-sans), system-ui, sans-serif;
   --color-primary: #7b39e8;
   --color-secondary: #2d69ea;
   --color-tertiary: #10a991; /* present in light */
