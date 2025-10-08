@@ -3,18 +3,32 @@ import type { Metadata } from 'next';
 import './globals.css';
 import './theme.css';
 import { ClerkProvider } from '@clerk/nextjs';
-import Header from '@/components/Header'; // or '@/components/Header' if that's your path
+import Navbar from '@/components/nav/Navbar';
+import { Montserrat, Cormorant_Garamond } from 'next/font/google';
 
 export const metadata: Metadata = {
   title: 'Streakling',
   description: 'Creator profiles'
 };
 
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  variable: '--font-montserrat',
+  display: 'swap'
+});
+
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  variable: '--font-display', // used as “Raffles-style” display serif
+  display: 'swap',
+  weight: ['400', '500', '600', '700']
+});
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang='en' data-theme='dark' suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
-        {/* No-flash: pick saved or system theme before paint */}
+        {/* No-flash theme pick */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -29,13 +43,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body suppressHydrationWarning>
-        <ClerkProvider
-          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-        >
-          {/* The gradient covers the WHOLE app, all routes */}
-          <div className='app-shell'>
-            <Header />
+      <body className={`${montserrat.variable} ${cormorant.variable}`} suppressHydrationWarning>
+        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+          <div className="app-shell">
+            <Navbar />
             {children}
           </div>
         </ClerkProvider>
