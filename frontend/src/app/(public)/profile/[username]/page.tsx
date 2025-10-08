@@ -2,6 +2,7 @@
 import { notFound } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { PublicProfile } from '@/types/profile';
+import ProfileQR from '@/components/profile/ProfileQR';
 
 // Reuse the same key-or-url helper pattern as ProfileCard
 function previewFromKeyOrUrl(key?: string | null, url?: string | null) {
@@ -9,6 +10,8 @@ function previewFromKeyOrUrl(key?: string | null, url?: string | null) {
   if (key && PUBLIC_BASE) return `${PUBLIC_BASE}/${key}`;
   return url ?? null;
 }
+
+const SITE = process.env.NEXT_PUBLIC_SITE_URL || '';
 
 type Props = { params: { username: string } };
 
@@ -24,6 +27,12 @@ export default async function PublicProfilePage({ params }: Props) {
   const bannerSrc = previewFromKeyOrUrl(p.bannerKey, null) ?? null;
   const avatarSrc =
     previewFromKeyOrUrl(p.avatarKey, p.avatarUrl ?? null) ?? null;
+
+  // Absolute URL for this profile (matches this route)
+  // Example result: https://your-domain.com/profile/alice
+  const profileUrl = SITE
+    ? `${SITE}/profile/${encodeURIComponent(params.username)}`
+    : `/profile/${encodeURIComponent(params.username)}`;
 
   return (
     <div className='max-w-4xl mx-auto px-4 py-10'>
@@ -104,6 +113,12 @@ export default async function PublicProfilePage({ params }: Props) {
               ))}
             </div>
           ) : null}
+
+          {/* QR code */}
+          <div className='mt-8 space-y-3'>
+            <h2 className='text-lg font-semibold'>Share this profile</h2>
+            <ProfileQR url={profileUrl} label={p.displayName || 'Profile'} />
+          </div>
         </div>
       </div>
     </div>
