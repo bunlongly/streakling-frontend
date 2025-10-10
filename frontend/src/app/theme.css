@@ -1,25 +1,11 @@
 @import 'tailwindcss';
 
-/* === Your tokens (kept) === */
+/* === Your tokens (kept, light-only) === */
 @theme theme {
-  --font-sans: var(--font-sans), system-ui, sans-serif;
-  --color-primary: #9e55f7;
-  --color-secondary: #447aee;
-  --color-tertiary: #13b9a3;
-  --color-background: #14141e;
-  --color-light: #ffffff;
-  --color-dark: #0a0a0f;
-  --color-surface: #1e1e29;
-  --color-accent: #9e55f7;
-  --color-success: #22c55e;
-  --color-warn: #f59e0b;
-  --color-danger: #ef4444;
-}
-@theme light {
   --font-sans: var(--font-sans), system-ui, sans-serif;
   --color-primary: #7b39e8;
   --color-secondary: #2d69ea;
-  --color-tertiary: #10a991; /* present in light */
+  --color-tertiary: #10a991;
   --color-background: #ffffff;
   --color-light: #0a0a0f;
   --color-dark: #0a0a0f;
@@ -30,52 +16,15 @@
   --color-danger: #dc2626;
 }
 
-/* ===== Runtime vars ===== */
+/* ===== Runtime vars (light only) ===== */
 :root {
-  /* default assume dark until JS runs */
-  --color-foreground: var(--color-light);
-  --color-border: color-mix(in oklab, var(--color-light) 12%, transparent);
-  color-scheme: dark;
-
-  /* gradient defaults (used when theme not set yet) */
-  --brand-spot-a: 18%;
-  --brand-spot-b: 16%;
-  --brand-spot-c: 0%; /* 0 in dark default to avoid green */
-  --brand-base-mix: 98%; /* deeper base for subtle glow */
-}
-
-/* LIGHT: stronger & includes a little tertiary */
-html[data-theme='light'] {
   --color-foreground: var(--color-dark);
   --color-border: color-mix(in oklab, var(--color-dark) 12%, transparent);
   color-scheme: light;
 
-  --brand-spot-a: 28%;
-  --brand-spot-b: 24%;
-  --brand-spot-c: 18%; /* allow some green in light only */
-  --brand-base-mix: 92%;
-}
-
-/* DARK: exact base #0d0d0d and NO green (tertiary suppressed) */
-html[data-theme='dark'] {
-  --color-background: #0d0d0d;
-  --brand-spot-a: 18%;
-  --brand-spot-b: 16%;
-  --brand-spot-c: 0%; /* remove green */
-  --brand-base-mix: 98%;
-}
-
-/* Prefer system on first visit if no saved theme */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) {
-    --color-foreground: var(--color-dark);
-    --color-border: color-mix(in oklab, var(--color-dark) 12%, transparent);
-    color-scheme: light;
-    --brand-spot-a: 28%;
-    --brand-spot-b: 24%;
-    --brand-spot-c: 18%;
-    --brand-base-mix: 92%;
-  }
+  --spotA: 30%;
+  --spotB: 26%;
+  --spotC: 20%;
 }
 
 /* ===== Base ===== */
@@ -92,57 +41,61 @@ body {
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
 }
 
-/* App shell gradient (theme-aware) */
+/* --- Fallback: plain color --- */
 .app-shell {
+  background-color: #ffffff;
+}
+
+/* ===== Static gradient background ===== */
+.app-shell {
+  position: relative;
   min-height: 100dvh;
-  background:
-    radial-gradient(
+  color: var(--color-foreground);
+
+  background: radial-gradient(
       1200px 600px at -10% -20%,
-      color-mix(
-        in oklab,
-        var(--color-primary) var(--brand-spot-a),
-        transparent
-      ),
+      color-mix(in oklab, var(--color-primary) var(--spotA), transparent),
       transparent
     ),
     radial-gradient(
       1000px 500px at 110% 0%,
+      color-mix(in oklab, var(--color-secondary) var(--spotB), transparent),
+      transparent
+    ),
+    radial-gradient(
+      900px 500px at 50% 120%,
+      color-mix(in oklab, var(--color-tertiary) var(--spotC), transparent),
+      transparent
+    ),
+    radial-gradient(
+      900px 520px at 110% 100%,
       color-mix(
         in oklab,
-        var(--color-secondary) var(--brand-spot-b),
+        var(--color-accent) calc(var(--spotA) * 0.7),
         transparent
       ),
       transparent
     ),
-    /* tertiary spot is 0% in dark, >0 in light */
-      radial-gradient(
-        900px 500px at 50% 120%,
-        color-mix(
-          in oklab,
-          var(--color-tertiary) var(--brand-spot-c),
-          transparent
-        ),
-        transparent
-      ),
     linear-gradient(
       180deg,
-      color-mix(
-        in oklab,
-        var(--color-background) var(--brand-base-mix),
-        transparent
-      ),
-      var(--color-background)
+      color-mix(in oklab, var(--color-primary) 12%, var(--color-background)) 0%,
+      color-mix(in oklab, var(--color-secondary) 10%, var(--color-background))
+        35%,
+      color-mix(in oklab, var(--color-tertiary) 8%, var(--color-background)) 70%,
+      var(--color-background) 100%
     );
-  color: var(--color-foreground);
+
+  /* Remove animations completely */
+  background-attachment: fixed, fixed, fixed, fixed, fixed;
 }
 
-/* Navbar / card subtle glow */
+/* ===== Components that use your tokens ===== */
 .surface-brand {
   background: radial-gradient(
       900px 400px at 120% -20%,
       color-mix(
         in oklab,
-        var(--color-primary) calc(var(--brand-spot-a) * 0.6),
+        var(--color-primary) calc(var(--spotA) * 0.6),
         transparent
       ),
       transparent
@@ -151,7 +104,7 @@ body {
       700px 350px at -20% 120%,
       color-mix(
         in oklab,
-        var(--color-secondary) calc(var(--brand-spot-b) * 0.5),
+        var(--color-secondary) calc(var(--spotB) * 0.5),
         transparent
       ),
       transparent
@@ -161,7 +114,6 @@ body {
   border-radius: 16px;
 }
 
-/* Card helper */
 .card-surface {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -182,4 +134,17 @@ body {
 /* Optional display font utility */
 .font-display {
   font-family: var(--font-display);
+}
+
+/* Smoother, modern border animation */
+@keyframes border-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }

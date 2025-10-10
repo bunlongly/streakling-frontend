@@ -21,9 +21,8 @@ const montserrat = Montserrat({
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang='en' data-theme='dark' suppressHydrationWarning>
-      <head>{/* Theme no-flash script here */}</head>
-      <body className={montserrat.variable} suppressHydrationWarning>
+    <html lang='en'>
+      <body className={montserrat.variable}>
         <ClerkProvider
           publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
         >
