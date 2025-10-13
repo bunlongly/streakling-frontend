@@ -10,6 +10,8 @@ import { useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+import { PrimaryThemeProvider } from '@/styles/muiTheme';
+
 export default function EditProfileClientPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const synced = useBackendSessionSync();
@@ -32,7 +34,6 @@ export default function EditProfileClientPage() {
         });
         setProfile(res.data);
       } catch (e: unknown) {
-        // type-safe error handling
         const msg =
           e instanceof HttpError
             ? e.message
@@ -50,14 +51,16 @@ export default function EditProfileClientPage() {
   if (!profile) return <div className='p-6'>Loading…</div>;
 
   return (
-    <div className='max-w-3xl mx-auto px-4 py-8 space-y-6'>
-      <div className='flex items-center justify-between'>
-        <h1 className='text-2xl font-semibold'>Edit Profile</h1>
-        <Link href='/profile' className='px-3 py-1.5 rounded-lg border'>
-          Back
-        </Link>
+    <PrimaryThemeProvider>
+      <div className='max-w-3xl mx-auto px-4 py-8 space-y-6'>
+        <div className='flex items-center justify-between'>
+          <h1 className='text-2xl font-semibold'>Edit Profile</h1>
+          <Link href='/profile' className='px-3 py-1.5 rounded-lg border'>
+            Back
+          </Link>
+        </div>
+        <ProfileForm initial={profile} />
       </div>
-      <ProfileForm initial={profile} />
-    </div>
+    </PrimaryThemeProvider>
   );
 }

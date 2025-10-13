@@ -1,8 +1,7 @@
-// src/components/profile/ProfileForm.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm, type SubmitErrorHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { PublicProfile } from '@/types/profile';
 import { api } from '@/lib/api';
@@ -10,21 +9,25 @@ import {
   updateMyProfileSchema,
   type UpdateMyProfileFormValues
 } from '@/schemas/profile';
+import ImageUploader from '@/components/uploader/ImageUploader';
 import IndustriesInput from './IndustriesInput';
-import ProfileImagePicker from './ProfileImagePicker';
 
-// Build a preview URL directly (no lib/images.ts needed)
-function previewFromKey(key?: string | null) {
-  if (!key) return null;
-  const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || '';
-  const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-  if (PUBLIC_BASE) return `${PUBLIC_BASE}/${key}`;
-  if (API_BASE)
-    return `${API_BASE}/api/uploads/view/${encodeURIComponent(key)}`;
-  return null; // neither configured → show "No image"
-}
+import {
+  Box,
+  Card,
+  CardHeader,
+  CardContent,
+  FormControlLabel,
+  Checkbox,
+  Divider,
+  Typography,
+  Stack,
+  Button
+} from '@mui/material';
 
-// Helper: some owner-only fields are optional/nullable on the response
+import TextFieldPro from '@/components/ui/TextFieldPro';
+import Flash, { type FlashKind } from '@/components/ui/Flash';
+
 type OwnerFields = Partial<{
   email: string | null;
   country: string | null;
@@ -33,7 +36,6 @@ type OwnerFields = Partial<{
   phone: string | null;
 }>;
 
-// Helper: safe error -> message (no `any`)
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'object' && err && 'message' in err) {
@@ -43,129 +45,108 @@ function getErrorMessage(err: unknown): string {
   return 'Failed to update profile';
 }
 
+// Walk RHF/Zod error tree and grab the first message
+function firstErrorMessage(errors: Record<string, unknown>): string | null {
+  const walk = (node: unknown): string | null => {
+    if (!node) return null;
+    if (typeof node === 'object') {
+      const rec = node as Record<string, unknown>;
+      if (typeof rec.message === 'string') return rec.message;
+      for (const v of Object.values(rec)) {
+        const found = walk(v);
+        if (found) return found;
+      }
+    } else if (Array.isArray(node)) {
+      for (const v of node) {
+        const found = walk(v);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  return walk(errors);
+}
+
 export default function ProfileForm({ initial }: { initial: PublicProfile }) {
   const initialWithOwner = initial as PublicProfile & OwnerFields;
 
   const [busy, setBusy] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
 
-  // local state for media + industries
-  const [avatarKey, setAvatarKey] = useState<string | null>(
-    initial.avatarKey ?? null
-  );
-  const [bannerKey, setBannerKey] = useState<string | null>(
-    initial.bannerKey ?? null
-  );
-  const [industries, setIndustries] = useState<string[]>(
-    (initial.industries || []).map(i => i.slug)
-  );
+  // Flash state
+  const [flashOpen, setFlashOpen] = useState(false);
+  const [flashKind, setFlashKind] = useState<FlashKind>('success');
+  const [flashMsg, setFlashMsg] = useState<string | null>(null);
+  const showFlash = (kind: FlashKind, msg: string) => {
+    setFlashKind(kind);
+    setFlashMsg(msg);
+    setFlashOpen(true);
+  };
 
-  // optional helper input: comma-separated editing UX
-  const [industriesText, setIndustriesText] = useState(industries.join(', '));
-
-  // keep helper text <-> array in sync
-  useEffect(() => {
-    setIndustriesText(industries.join(', '));
-  }, [industries]);
-
-  // live previews
-  const avatarPreviewUrl =
-    previewFromKey(avatarKey) ?? initial.avatarUrl ?? null;
-  const bannerPreviewUrl = previewFromKey(bannerKey);
-
-  // compute defaults from current local state
-  const defaults: UpdateMyProfileFormValues = useMemo(
-    () => ({
+  const {
+    register,
+    control,
+    handleSubmit,
+    setValue,
+    watch,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<UpdateMyProfileFormValues>({
+    resolver: zodResolver(updateMyProfileSchema),
+    defaultValues: {
       username: initial.username ?? '',
       displayName: initial.displayName ?? '',
       email: initialWithOwner.email ?? '',
       country: initialWithOwner.country ?? '',
       religion: initialWithOwner.religion ?? '',
-      dateOfBirth: initialWithOwner.dateOfBirth?.slice(0, 10) ?? '',
+      dateOfBirth: initialWithOwner.dateOfBirth ?? '',
       phone: initialWithOwner.phone ?? '',
-
-      // media
-      avatarKey,
-      bannerKey,
-
-      // flags
+      avatarKey: initial.avatarKey ?? null,
+      bannerKey: initial.bannerKey ?? null,
       showEmail: initial.showEmail ?? false,
       showReligion: initial.showReligion ?? false,
       showDateOfBirth: initial.showDateOfBirth ?? false,
       showPhone: initial.showPhone ?? false,
       showCountry: initial.showCountry ?? true,
-
-      // industries (RHF mirror)
-      industries
-    }),
-    [initial, initialWithOwner, avatarKey, bannerKey, industries]
-  );
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    reset
-  } = useForm<UpdateMyProfileFormValues>({
-    resolver: zodResolver(updateMyProfileSchema),
-    defaultValues: defaults
+      industries: (initial.industries || []).map(i => i.slug)
+    },
+    mode: 'onSubmit'
   });
 
-  // IMPORTANT: hydrate the form when `defaults` change
-  useEffect(() => {
-    reset(defaults);
-  }, [defaults, reset]);
+  const avatarKey = watch('avatarKey') ?? null;
+  const bannerKey = watch('bannerKey') ?? null;
+  const industries = watch('industries') ?? [];
 
-  // media pickers keep RHF in sync
-  function applyAvatar(k: string | null) {
-    setAvatarKey(k);
-    setValue('avatarKey', k === null ? null : k, { shouldDirty: true });
-  }
-  function applyBanner(k: string | null) {
-    setBannerKey(k);
-    setValue('bannerKey', k === null ? null : k, { shouldDirty: true });
-  }
+  // keep a human-friendly edit field if you like (we don’t need it now with Autocomplete)
 
-  // helper: parse comma-separated industries into array
-  function parseIndustriesText(input: string): string[] {
-    return input
-      .split(',')
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean);
-  }
+  const avatarUploaderKey = useMemo(
+    () => `avatar-${avatarKey ?? 'none'}`,
+    [avatarKey]
+  );
+  const bannerUploaderKey = useMemo(
+    () => `banner-${bannerKey ?? 'none'}`,
+    [bannerKey]
+  );
 
   async function onSubmit(values: UpdateMyProfileFormValues) {
     setBusy(true);
-    setServerError(null);
     try {
-      // final industries from helper text (if user typed there) OR current state
-      const finalIndustries =
-        industriesText.trim() !== industries.join(', ')
-          ? parseIndustriesText(industriesText)
-          : industries;
-
       const payload: UpdateMyProfileFormValues & { industries: string[] } = {
         ...values,
-        industries: finalIndustries
+        avatarKey: avatarKey ?? null,
+        bannerKey: bannerKey ?? null,
+        industries: industries as string[]
       };
 
       const res = await api.profile.update(payload);
       const updated = res.data as PublicProfile & OwnerFields;
 
-      // reflect server truth in local state
-      setAvatarKey(updated.avatarKey ?? null);
-      setBannerKey(updated.bannerKey ?? null);
-      setIndustries((updated.industries || []).map(i => i.slug));
-
-      // reset the form with fresh values so fields show the saved data
       reset({
         username: updated.username ?? '',
         displayName: updated.displayName ?? '',
         email: updated.email ?? '',
         country: updated.country ?? '',
         religion: updated.religion ?? '',
-        dateOfBirth: updated.dateOfBirth?.slice(0, 10) ?? '',
+        dateOfBirth: updated.dateOfBirth ?? '',
         phone: updated.phone ?? '',
         avatarKey: updated.avatarKey ?? null,
         bannerKey: updated.bannerKey ?? null,
@@ -176,175 +157,332 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
         showCountry: updated.showCountry ?? true,
         industries: (updated.industries || []).map(i => i.slug)
       });
+
+      showFlash('success', 'Profile saved!');
     } catch (e: unknown) {
-      setServerError(getErrorMessage(e));
+      showFlash('error', getErrorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
+  const onInvalid: SubmitErrorHandler<UpdateMyProfileFormValues> = errs => {
+    const msg = firstErrorMessage(errs as unknown as Record<string, unknown>);
+    showFlash('error', msg ?? 'Please fix the highlighted fields.');
+  };
+
   return (
-    <form className='space-y-6' onSubmit={handleSubmit(onSubmit)}>
-      {/* identity */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <div>
-          <label className='block text-sm font-medium'>Display name</label>
-          <input
-            {...register('displayName')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.displayName && (
-            <p className='text-sm text-red-600'>{errors.displayName.message}</p>
-          )}
-        </div>
-        <div>
-          <label className='block text-sm font-medium'>Username</label>
-          <input
-            {...register('username')}
-            placeholder='your-handle'
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          <p className='text-xs text-gray-500'>
-            letters, numbers, dash, underscore
-          </p>
-          {errors.username && (
-            <p className='text-sm text-red-600'>{errors.username.message}</p>
-          )}
-        </div>
-      </div>
+    <>
+      <Box
+        component='form'
+        onSubmit={handleSubmit(onSubmit, onInvalid)}
+        sx={{ display: 'grid', gap: 3 }}
+      >
+        {/* Header */}
+        <Box>
+          <Typography variant='h5' fontWeight={600}>
+            Edit Profile
+          </Typography>
+          <Typography variant='body2' color='text.secondary'>
+            Update your public information, media, and privacy preferences.
+          </Typography>
+        </Box>
 
-      {/* contact & meta */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <div>
-          <label className='block text-sm font-medium'>Email</label>
-          <input
-            type='email'
-            {...register('email')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.email && (
-            <p className='text-sm text-red-600'>{errors.email.message}</p>
-          )}
-        </div>
-        <div>
-          <label className='block text-sm font-medium'>Phone</label>
-          <input
-            {...register('phone')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.phone && (
-            <p className='text-sm text-red-600'>{errors.phone.message}</p>
-          )}
-        </div>
-        <div>
-          <label className='block text-sm font-medium'>Country</label>
-          <input
-            {...register('country')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.country && (
-            <p className='text-sm text-red-600'>{errors.country.message}</p>
-          )}
-        </div>
-        <div>
-          <label className='block text-sm font-medium'>Religion</label>
-          <input
-            {...register('religion')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.religion && (
-            <p className='text-sm text-red-600'>{errors.religion.message}</p>
-          )}
-        </div>
-        <div>
-          <label className='block text-sm font-medium'>Date of birth</label>
-        <input
-            type='date'
-            {...register('dateOfBirth')}
-            className='w-full rounded-xl border px-3 py-2'
-          />
-          {errors.dateOfBirth && (
-            <p className='text-sm text-red-600'>{errors.dateOfBirth.message}</p>
-          )}
-        </div>
-      </div>
+        {/* Media */}
+        <Card variant='outlined' sx={{ boxShadow: 1 }}>
+          <CardHeader title='Media' subheader='Upload your avatar and banner' />
+          <CardContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }
+              }}
+            >
+              <Stack spacing={1.5}>
+                <ImageUploader
+                  key={avatarUploaderKey}
+                  label='Avatar'
+                  category='profile'
+                  purpose='avatar'
+                  existingKey={avatarKey}
+                  previewUrl={null}
+                  onUploadedAction={(key: string) =>
+                    setValue('avatarKey', key, {
+                      shouldDirty: true,
+                      shouldTouch: true
+                    })
+                  }
+                />
+                {avatarKey ? (
+                  <Button
+                    size='small'
+                    variant='text'
+                    onClick={() =>
+                      setValue('avatarKey', null, {
+                        shouldDirty: true,
+                        shouldTouch: true
+                      })
+                    }
+                  >
+                    Remove avatar
+                  </Button>
+                ) : null}
+              </Stack>
 
-      {/* privacy toggles */}
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-        <label className='flex items-center gap-2 text-sm'>
-          <input type='checkbox' {...register('showEmail')} />
-          Show email publicly
-        </label>
-        <label className='flex items-center gap-2 text-sm'>
-          <input type='checkbox' {...register('showPhone')} />
-          Show phone publicly
-        </label>
-        <label className='flex items-center gap-2 text-sm'>
-          <input type='checkbox' {...register('showCountry')} />
-          Show country publicly
-        </label>
-        <label className='flex items-center gap-2 text-sm'>
-          <input type='checkbox' {...register('showReligion')} />
-          Show religion publicly
-        </label>
-        <label className='flex items-center gap-2 text-sm'>
-          <input type='checkbox' {...register('showDateOfBirth')} />
-          Show DOB publicly
-        </label>
-      </div>
+              <Stack spacing={1.5}>
+                <ImageUploader
+                  key={bannerUploaderKey}
+                  label='Banner'
+                  category='profile'
+                  purpose='banner'
+                  existingKey={bannerKey}
+                  previewUrl={null}
+                  onUploadedAction={(key: string) =>
+                    setValue('bannerKey', key, {
+                      shouldDirty: true,
+                      shouldTouch: true
+                    })
+                  }
+                />
+                {bannerKey ? (
+                  <Button
+                    size='small'
+                    variant='text'
+                    onClick={() =>
+                      setValue('bannerKey', null, {
+                        shouldDirty: true,
+                        shouldTouch: true
+                      })
+                    }
+                  >
+                    Remove banner
+                  </Button>
+                ) : null}
+              </Stack>
+            </Box>
+          </CardContent>
+        </Card>
 
-      {/* industries */}
-      <div className='space-y-2'>
-        <IndustriesInput value={industries} onChange={setIndustries} />
-        {/* Companion comma input (optional, doesn’t change your IndustriesInput) */}
-        <div className='grid gap-1'>
-          <label className='text-xs text-gray-500'>
-            Or type industries separated by commas
-          </label>
-          <input
-            value={industriesText}
-            onChange={e => setIndustriesText(e.target.value)}
-            onBlur={() => setIndustries(parseIndustriesText(industriesText))}
-            placeholder='e.g. tech, marketing, finance'
-            className='w-full rounded-xl border px-3 py-2 text-sm'
+        {/* Identity */}
+        <Card variant='outlined' sx={{ boxShadow: 1 }}>
+          <CardHeader title='Identity' />
+          <CardContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }
+              }}
+            >
+              <TextFieldPro
+                label='Display name'
+                {...register('displayName')}
+                error={!!errors.displayName}
+                helperText={errors.displayName?.message}
+              />
+              <TextFieldPro
+                label='Username'
+                placeholder='your-handle'
+                {...register('username')}
+                error={!!errors.username}
+                helperText={
+                  errors.username?.message ??
+                  'letters, numbers, dash, underscore'
+                }
+              />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Contact & Meta */}
+        <Card variant='outlined' sx={{ boxShadow: 1 }}>
+          <CardHeader title='Contact & Meta' />
+          <CardContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }
+              }}
+            >
+              <TextFieldPro
+                type='email'
+                label='Email'
+                {...register('email')}
+                error={!!errors.email}
+                helperText={errors.email?.message}
+              />
+              <TextFieldPro
+                label='Phone'
+                {...register('phone')}
+                error={!!errors.phone}
+                helperText={errors.phone?.message}
+              />
+              <TextFieldPro
+                label='Country'
+                {...register('country')}
+                error={!!errors.country}
+                helperText={errors.country?.message}
+              />
+              <TextFieldPro
+                label='Religion'
+                {...register('religion')}
+                error={!!errors.religion}
+                helperText={errors.religion?.message}
+              />
+              <TextFieldPro
+                type='date'
+                label='Date of birth'
+                InputLabelProps={{ shrink: true }}
+                {...register('dateOfBirth')}
+                error={!!errors.dateOfBirth}
+                helperText={errors.dateOfBirth?.message}
+              />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Privacy */}
+        <Card variant='outlined' sx={{ boxShadow: 1 }}>
+          <CardHeader
+            title='Privacy'
+            subheader='Control what is visible on your public profile'
           />
-          <p className='text-xs text-gray-500'>
-            We’ll convert this into tags for you.
-          </p>
-        </div>
-      </div>
+          <CardContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 1,
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  sm: '1fr 1fr',
+                  md: 'repeat(3, 1fr)'
+                }
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Controller
+                    name='showEmail'
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)}
+                      />
+                    )}
+                  />
+                }
+                label='Show email publicly'
+              />
+              <FormControlLabel
+                control={
+                  <Controller
+                    name='showPhone'
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)}
+                      />
+                    )}
+                  />
+                }
+                label='Show phone publicly'
+              />
+              <FormControlLabel
+                control={
+                  <Controller
+                    name='showCountry'
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)}
+                      />
+                    )}
+                  />
+                }
+                label='Show country publicly'
+              />
+              <FormControlLabel
+                control={
+                  <Controller
+                    name='showReligion'
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)}
+                      />
+                    )}
+                  />
+                }
+                label='Show religion publicly'
+              />
+              <FormControlLabel
+                control={
+                  <Controller
+                    name='showDateOfBirth'
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        checked={!!field.value}
+                        onChange={e => field.onChange(e.target.checked)}
+                      />
+                    )}
+                  />
+                }
+                label='Show DOB publicly'
+              />
+            </Box>
+          </CardContent>
+        </Card>
 
-      {/* images */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-        <ProfileImagePicker
-          label='Avatar'
-          purpose='avatar'
-          value={avatarKey}
-          onChange={applyAvatar}
-          previewUrl={avatarPreviewUrl}
-        />
-        <ProfileImagePicker
-          label='Banner'
-          purpose='banner'
-          value={bannerKey}
-          onChange={applyBanner}
-          previewUrl={bannerPreviewUrl}
-        />
-      </div>
+        {/* Industries */}
+        <Card variant='outlined' sx={{ boxShadow: 1 }}>
+          <CardHeader
+            title='Industries'
+            subheader='Pick from suggestions or add your own'
+          />
+          <CardContent>
+            <Stack spacing={2}>
+              <IndustriesInput
+                value={industries as string[]}
+                onChange={vals =>
+                  setValue('industries', vals, { shouldDirty: true })
+                }
+              />
+              <Divider />
+              <Typography variant='caption' color='text.secondary'>
+                You can also press <b>Enter</b> or <b>Comma</b> to add a custom
+                tag.
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
 
-      {serverError ? (
-        <p className='text-sm text-red-600'>{serverError}</p>
-      ) : null}
+        {/* Actions */}
+        <Stack direction='row' gap={2} justifyContent='flex-end'>
+          <Button
+            type='submit'
+            variant='contained'
+            color='primary'
+            disabled={busy || isSubmitting}
+          >
+            {busy || isSubmitting ? 'Saving…' : 'Save changes'}
+          </Button>
+        </Stack>
+      </Box>
 
-      <div className='flex gap-3'>
-        <button
-          type='submit'
-          disabled={busy}
-          className='px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50'
-        >
-          {busy ? 'Saving…' : 'Save changes'}
-        </button>
-      </div>
-    </form>
+      {/* Modern flash */}
+      <Flash
+        open={flashOpen}
+        kind={flashKind}
+        message={flashMsg}
+        onClose={() => setFlashOpen(false)}
+      />
+    </>
   );
 }

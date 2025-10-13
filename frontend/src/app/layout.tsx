@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import './globals.css';
 import './theme.css';
-import { ClerkProvider } from '@clerk/nextjs';
 import Navbar from '@/components/nav/Navbar';
+import ClientProviders from './providers/ClientProviders';
 
 export const metadata: Metadata = {
   title: 'Streakling',
@@ -22,14 +22,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang='en'>
       <body className={montserrat.variable}>
-        <ClerkProvider
-          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-        >
+        <ClientProviders>
           <div className='app-shell'>
             <Navbar />
             {children}
           </div>
-        </ClerkProvider>
+        </ClientProviders>
       </body>
     </html>
   );
