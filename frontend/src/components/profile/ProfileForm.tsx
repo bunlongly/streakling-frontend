@@ -180,9 +180,6 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
       >
         {/* Header */}
         <Box>
-          <Typography variant='h5' fontWeight={600}>
-            Edit Profile
-          </Typography>
           <Typography variant='body2' color='text.secondary'>
             Update your public information, media, and privacy preferences.
           </Typography>
