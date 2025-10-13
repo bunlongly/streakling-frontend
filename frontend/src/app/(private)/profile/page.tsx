@@ -5,10 +5,11 @@ import { useEffect, useState } from 'react';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
 import { api, HttpError } from '@/lib/api';
 import type { PublicProfile } from '@/types/profile';
-import ProfileCard from '@/components/profile/ProfileCard';
 import { useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+import ProfileDashboard from '@/components/profile/ProfileDashboard';
 
 export default function MyProfileClientPage() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -43,25 +44,24 @@ export default function MyProfileClientPage() {
     })();
   }, [isLoaded, isSignedIn, synced, router]);
 
-  if (!isLoaded || !synced) {
+  if (!isLoaded || !synced)
     return <div className='p-6'>Preparing your session…</div>;
-  }
-  if (err) {
-    return <div className='p-6 text-red-600'>{err}</div>;
-  }
-  if (!profile) {
-    return <div className='p-6'>Loading…</div>;
-  }
+  if (err) return <div className='p-6 text-red-600'>{err}</div>;
+  if (!profile) return <div className='p-6'>Loading…</div>;
 
   return (
-    <div className='max-w-3xl mx-auto px-4 py-8 space-y-6'>
+    <div className='mx-auto max-w-5xl px-4 py-8 space-y-6'>
       <div className='flex items-center justify-between'>
         <h1 className='text-2xl font-semibold'>My Profile</h1>
-        <Link href='/profile/edit' className='px-3 py-1.5 rounded-lg border'>
+        <Link
+          href='/profile/edit'
+          className='rounded-lg border border-token px-3 py-1.5 bg-white hover:bg-white/80'
+        >
           Edit
         </Link>
       </div>
-      <ProfileCard profile={profile} />
+
+      <ProfileDashboard profile={profile} />
     </div>
   );
 }
