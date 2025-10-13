@@ -11,18 +11,48 @@ export default function CreateChallengePage() {
   const { isLoaded, isSignedIn } = useAuth();
   const synced = useBackendSessionSync();
 
-  if (!isLoaded || !synced)
-    return <div className='p-6'>Preparing your session…</div>;
-  if (!isSignedIn) return <div className='p-6'>Please sign in.</div>;
+  if (!isLoaded || !synced) {
+    return (
+      <main className="min-h-dvh bg-brand-mix">
+        <section className="max-w-4xl mx-auto px-4 md:px-6 py-10">
+          <div className="rounded-2xl border border-token bg-white/70 p-6 shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]">
+            Preparing your session…
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <main className="min-h-dvh bg-brand-mix">
+        <section className="max-w-4xl mx-auto px-4 md:px-6 py-10">
+          <div className="rounded-2xl border border-token bg-white/70 p-6 shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]">
+            Please sign in.
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   function onSaved(c: Challenge) {
     router.replace(`/profile/challenges/${c.id}`);
   }
 
   return (
-    <div className='max-w-3xl mx-auto px-4 py-8 space-y-6'>
-      <h1 className='text-2xl font-semibold'>Create Challenge</h1>
-      <ChallengeForm mode='create' onSaved={onSaved} />
-    </div>
+    <main className="min-h-dvh bg-brand-mix">
+      <section className="max-w-5xl mx-auto px-4 md:px-6 py-10">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="h1">Create Challenge</h1>
+            <p className="muted text-sm">Set the rules, goals, and prizes.</p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <ChallengeForm mode="create" onSaved={onSaved} />
+        </div>
+      </section>
+    </main>
   );
 }
