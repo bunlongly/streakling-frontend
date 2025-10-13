@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Header from '@/components/Header';
 import AuthGate from '@/components/AuthGate';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
 import { api, type DigitalCard } from '@/lib/api';
@@ -22,7 +21,6 @@ export default function MyCardsPage() {
   return (
     <AuthGate>
       <main className='min-h-dvh bg-brand-mix'>
-        <Header />
         <section className='max-w-4xl mx-auto mt-16 p-6 card-surface'>
           <div className='flex items-center justify-between'>
             <h1 className='h1'>My Digital Cards</h1>
