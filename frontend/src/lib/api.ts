@@ -131,8 +131,14 @@ export const http = new HttpClient(API_BASE);
 
 // ---- Profile ----
 export const apiProfile = {
+  // get: (init?: RequestInitExtra) =>
+  //   http.get<ApiSuccess<PublicProfile>>('/api/profile', init),
+
   get: (init?: RequestInitExtra) =>
-    http.get<ApiSuccess<PublicProfile>>('/api/profile', init),
+    http.get<ApiSuccess<PublicProfile & { role?: 'ADMIN' | 'USER' }>>(
+      '/api/profile',
+      init
+    ),
 
   update: (payload: UpdateMyProfileInput) =>
     http.patch<ApiSuccess<PublicProfile>>('/api/profile', payload),
@@ -342,6 +348,73 @@ export const apiChallenge = {
     )
 };
 
+export const apiAdmin = {
+  getStats: () =>
+    http.get<
+      ApiSuccess<{
+        users: number;
+        challenges: number;
+        digitalCards: number;
+        portfolios: number;
+      }>
+    >('/api/admin/stats'),
+  listUsers: (params?: { limit?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: Array<{
+          id: string;
+          email: string | null;
+          name: string | null;
+          role: string;
+          createdAt: string;
+        }>;
+        nextCursor: string | null;
+      }>
+    >('/api/admin/users', { query: params }),
+  listChallenges: (params?: { limit?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: Array<{
+          id: string;
+          title: string;
+          status: string;
+          createdAt: string;
+          _count?: { submissions: number };
+        }>;
+        nextCursor: string | null;
+      }>
+    >('/api/admin/challenges', { query: params }),
+  listCards: (params?: { limit?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: Array<{
+          id: string;
+          slug: string;
+          firstName: string;
+          lastName: string;
+          publishStatus: string;
+          userId: string;
+          createdAt: string;
+        }>;
+        nextCursor: string | null;
+      }>
+    >('/api/admin/cards', { query: params }),
+  listPortfolios: (params?: { limit?: number; cursor?: string }) =>
+    http.get<
+      ApiSuccess<{
+        items: Array<{
+          id: string;
+          slug: string;
+          title: string;
+          publishStatus: string;
+          userId: string;
+          createdAt: string;
+        }>;
+        nextCursor: string | null;
+      }>
+    >('/api/admin/portfolios', { query: params })
+};
+
 // ---- Upload signing ----
 // Match your backend sign response: { key, uploadUrl, url }
 export type SignUploadInput = {
@@ -370,9 +443,9 @@ export const api = {
   portfolio: apiPortfolio,
   uploads: apiUploads,
   profile: apiProfile,
-  challenge: apiChallenge
+  challenge: apiChallenge,
+  admin: apiAdmin
 };
-
 // Re-export types for convenience
 export type {
   DigitalCard,

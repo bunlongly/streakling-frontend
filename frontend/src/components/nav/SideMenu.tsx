@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { SignedIn, SignedOut } from '@clerk/nextjs';
+import { SignedIn, SignedOut, useAuth } from '@clerk/nextjs';
 import type { NavItem } from './NavConfig';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 
@@ -19,7 +19,12 @@ import MilitaryTechRoundedIcon from '@mui/icons-material/MilitaryTechRounded';
 import AddTaskRoundedIcon from '@mui/icons-material/AddTaskRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 
+/* Admin icons */
+import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
+
 import MagicBorder from '@/components/ui/MagicBorder';
+import useBackendSessionSync from '@/lib/useBackendSessionSync';
+import { api } from '@/lib/api';
 
 type Props = {
   open: boolean;
@@ -29,8 +34,32 @@ type Props = {
   authedSecondary: NavItem[];
 };
 
+/* Tiny inline hook to get me (role-aware) */
+function useMe(enabled: boolean) {
+  const [role, setRole] = React.useState<'ADMIN' | 'USER' | undefined>();
+  React.useEffect(() => {
+    if (!enabled) return;
+    let stop = false;
+    (async () => {
+      try {
+        const res = await api.profile.get();
+        const d = (res as any).data || (res as any);
+        if (!stop) setRole(d?.role as 'ADMIN' | 'USER' | undefined);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [enabled]);
+  return { role };
+}
+
+/* Map icons for main & profile routes */
 const iconFor = (href: string) => {
   switch (href) {
+    // public
     case '/profiles':
       return <GroupsRoundedIcon sx={{ fontSize: 18 }} />;
     case '/profile/digitalcard':
@@ -39,6 +68,8 @@ const iconFor = (href: string) => {
       return <WorkRoundedIcon sx={{ fontSize: 18 }} />;
     case '/challenges':
       return <EmojiEventsRoundedIcon sx={{ fontSize: 18 }} />;
+
+    // authed
     case '/profile':
       return <PersonRoundedIcon sx={{ fontSize: 18 }} />;
     case '/profile/cards':
@@ -55,10 +86,17 @@ const iconFor = (href: string) => {
       return <AddTaskRoundedIcon sx={{ fontSize: 18 }} />;
     case '/profile/submissions':
       return <SendRoundedIcon sx={{ fontSize: 18 }} />;
+
+    // admin (top-level link may come from your nav config later)
+    case '/admin':
+      return <AdminPanelSettingsRoundedIcon sx={{ fontSize: 18 }} />;
+
     default:
       return null;
   }
 };
+
+import * as React from 'react';
 
 export default function SideMenu({
   open,
@@ -67,6 +105,22 @@ export default function SideMenu({
   authedPrimary,
   authedSecondary
 }: Props) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const synced = useBackendSessionSync();
+  const { role } = useMe(isLoaded && isSignedIn && synced);
+
+  // Admin block (shown only when role is ADMIN)
+  const adminLinks: NavItem[] =
+    role === 'ADMIN'
+      ? [
+          { href: '/admin', label: 'Admin Dashboard' },
+          { href: '/admin/users', label: 'Users' },
+          { href: '/admin/challenges', label: 'Challenges' },
+          { href: '/admin/cards', label: 'Digital Cards' },
+          { href: '/admin/portfolios', label: 'Portfolios' }
+        ]
+      : [];
+
   return (
     <>
       {/* Backdrop (fade) */}
@@ -93,7 +147,6 @@ export default function SideMenu({
           <aside
             className={[
               'h-full w-full rounded-2xl overflow-hidden',
-              // glass + soft brand gradient (primary/secondary/tertiary)
               'backdrop-blur-xl',
               'bg-[linear-gradient(135deg,rgba(158,85,247,0.22)_0%,rgba(68,122,238,0.22)_40%,rgba(19,185,163,0.22)_100%)]',
               'border border-white/35'
@@ -157,6 +210,33 @@ export default function SideMenu({
                     ))}
                   </ul>
                 </div>
+
+                {/* Admin section (role-gated) */}
+                {role === 'ADMIN' ? (
+                  <div>
+                    <p className='px-3 pb-2 text-xs uppercase tracking-wide opacity-80'>
+                      Admin
+                    </p>
+                    <ul className='space-y-1'>
+                      {adminLinks.map(link => (
+                        <li key={link.href}>
+                          <Link
+                            href={link.href}
+                            className='flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-white/40'
+                            onClick={onClose}
+                          >
+                            {iconFor(link.href) ?? (
+                              <AdminPanelSettingsRoundedIcon
+                                sx={{ fontSize: 18 }}
+                              />
+                            )}
+                            <span>{link.label}</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </SignedIn>
 
               <SignedOut>
