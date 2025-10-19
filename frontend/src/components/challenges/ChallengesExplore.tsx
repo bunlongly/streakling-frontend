@@ -4,15 +4,33 @@
 import * as React from 'react';
 import { api } from '@/lib/api';
 import ChallengePosterCard from '@/components/challenges/ChallengePosterCard';
-import type { Challenge } from '@/types/challenge';
+import type { Challenge as ApiChallenge } from '@/types/challenge';
+
+// Narrowed shape that satisfies ChallengePosterCard:
+// - brandName: string | null (no undefined)
+// - postedOn: string (no undefined)
+type CardChallenge = Omit<ApiChallenge, 'brandName' | 'postedOn'> & {
+  brandName: string | null;
+  postedOn: string;
+};
+
+function normalize(c: ApiChallenge): CardChallenge {
+  return {
+    ...c,
+    brandName: c.brandName ?? null,
+    postedOn: c.postedOn ?? c.createdAt ?? ''
+  };
+}
 
 export default function ChallengesExplore({
   initialItems
 }: {
-  initialItems: Challenge[];
+  initialItems: ApiChallenge[];
 }) {
   const [q, setQ] = React.useState('');
-  const [items, setItems] = React.useState<Challenge[]>(initialItems);
+  const [items, setItems] = React.useState<CardChallenge[]>(
+    initialItems.map(normalize)
+  );
   const [loading, setLoading] = React.useState(false);
 
   async function runSearch(query: string) {
@@ -22,7 +40,9 @@ export default function ChallengesExplore({
         limit: 24,
         q: query || undefined
       });
-      setItems((data.items ?? []) as Challenge[]);
+
+      const list = (data.items ?? []) as ApiChallenge[];
+      setItems(list.map(normalize));
     } finally {
       setLoading(false);
     }

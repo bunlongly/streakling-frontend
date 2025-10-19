@@ -43,8 +43,13 @@ function slugify(input: string) {
 }
 
 function sanitize(values: DigitalCardFormValues): DigitalCardFormValues {
-  const toUndef = (s: string | undefined | null): string | undefined =>
-    s != null && typeof s === 'string' && s.trim() === '' ? undefined : s;
+  // FIX: never return `null`; collapse null/empty-string to `undefined`,
+  // and return the trimmed string when present.
+  const toUndef = (s: string | undefined | null): string | undefined => {
+    if (s == null) return undefined;
+    const t = s.trim();
+    return t === '' ? undefined : t;
+  };
 
   return {
     ...values,
@@ -458,7 +463,7 @@ export default function ProfileCardForm({ initial, id }: Props) {
           </div>
         </div>
 
-        <div className='rounded-xl border border-token p-3 bg-white/60'>
+        <div className='rounded-xl border border-token p-3 bg:white/60 bg-white/60'>
           <div className='font-medium mb-2'>Visibility toggles</div>
           <div className='grid sm:grid-cols-2 gap-2 text-sm'>
             <label className='inline-flex items-center gap-2'>

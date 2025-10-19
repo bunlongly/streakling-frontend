@@ -73,7 +73,7 @@ export default function UsernameOnboardingPage() {
     handleSubmit,
     setValue,
     watch,
-    formState: { errors, isValid, isSubmitting, isDirty }
+    formState: { errors, isValid, isSubmitting }
   } = useForm<UsernameFormValues>({
     resolver: zodResolver(usernameSchema),
     defaultValues: { username: '' },

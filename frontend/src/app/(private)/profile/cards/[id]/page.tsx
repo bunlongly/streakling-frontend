@@ -19,7 +19,7 @@ async function getInitial(id: string) {
     cache: 'no-store'
   } satisfies RequestInit);
 
-  return res.data as DigitalCard; // ApiSuccess<DigitalCard> -> .data
+  return res.data as DigitalCard;
 }
 
 /** Convert API shape (nullables) -> form shape (undefined for empty) */
@@ -55,7 +55,7 @@ function toFormInitial(card: DigitalCard): Partial<DigitalCardFormValues> {
     religion: toUndef(card.religion),
     phone: toUndef(card.phone),
 
-    // visibility flags (controller returns these explicitly)
+    // visibility flags
     showPhone: card.showPhone,
     showReligion: card.showReligion,
     showCompany: card.showCompany,
@@ -72,11 +72,12 @@ function toFormInitial(card: DigitalCard): Partial<DigitalCardFormValues> {
 }
 
 export default async function EditCardPage({
+  // ✅ In Next.js 15, `params` is a Promise
   params
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const { id } = params;
+  const { id } = await params; // or: const { use } = await import('react'); const { id } = use(params)
   const card = await getInitial(id);
   const initial: Partial<DigitalCardFormValues> = toFormInitial(card);
 

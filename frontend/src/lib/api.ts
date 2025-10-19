@@ -32,6 +32,17 @@ export type ApiFail = {
   message: string;
   errors?: unknown;
 };
+export type BillingCheckoutResponse = { status: 'ok'; url: string };
+export type InvoiceItem = {
+  id: string;
+  number: string | null;
+  status: string | null;
+  total: number; // cents
+  currency: string; // 'usd'
+  created: number; // ms
+  hosted_invoice_url: string | null;
+  invoice_pdf: string | null;
+};
 
 export class HttpError<T = unknown> extends Error {
   status: number;
@@ -414,6 +425,19 @@ export const apiAdmin = {
       }>
     >('/api/admin/portfolios', { query: params })
 };
+// --- add a new section (similar to apiPortfolio/apiChallenge) ---
+export const apiBilling = {
+  /** Start Stripe Checkout for a plan */
+  checkout: (plan: 'basic' | 'pro' | 'ultimate') =>
+    http.post<BillingCheckoutResponse>('/api/billing/checkout', { plan }),
+
+  /** Open Stripe Customer Portal */
+  portal: () => http.post<{ status: 'ok'; url: string }>('/api/billing/portal'),
+
+  /** List my invoices */
+  listInvoices: () =>
+    http.get<{ status: 'ok'; items: InvoiceItem[] }>('/api/billing/invoices')
+};
 
 // ---- Upload signing ----
 // Match your backend sign response: { key, uploadUrl, url }
@@ -444,7 +468,8 @@ export const api = {
   uploads: apiUploads,
   profile: apiProfile,
   challenge: apiChallenge,
-  admin: apiAdmin
+  admin: apiAdmin,
+  billing: apiBilling
 };
 // Re-export types for convenience
 export type {

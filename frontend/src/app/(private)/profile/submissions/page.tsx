@@ -10,9 +10,22 @@ type Row = {
   id: string;
   challengeId: string;
   platform: string;
-  linkUrl: string | null;
-  imageKey: string | null;
-  notes: string | null;
+  linkUrl: string | null; // local shape: no undefined
+  imageKey: string | null; // local shape: no undefined
+  notes: string | null; // local shape: no undefined
+  submissionOrder: number;
+  status: string;
+  createdAt: string; // ISO string
+};
+
+// Match the likely API shape (allows undefined)
+type ApiSubmission = {
+  id: string;
+  challengeId: string;
+  platform: string;
+  linkUrl?: string | null;
+  imageKey?: string | null;
+  notes?: string | null;
   submissionOrder: number;
   status: string;
   createdAt: string;
@@ -49,7 +62,6 @@ function statusChip(s: string) {
 /* ===== Platform icon + chip ===== */
 function PlatformIcon({ platform }: { platform: string }) {
   const p = (platform || '').toLowerCase();
-  // lightweight inline icons; swap for lucide or brand svgs if you prefer
   if (p.includes('tiktok')) {
     return (
       <svg viewBox='0 0 24 24' className='size-4' aria-hidden>
@@ -147,7 +159,21 @@ export default function MySubmissionsPage() {
       try {
         const res = await api.challenge.listMySubmissions();
         if (!mounted) return;
-        setRows(res.data ?? []);
+
+        // Normalize API → local Row shape (undefined → null)
+        const mapped: Row[] = ((res.data ?? []) as ApiSubmission[]).map(s => ({
+          id: s.id,
+          challengeId: s.challengeId,
+          platform: s.platform,
+          linkUrl: s.linkUrl ?? null,
+          imageKey: s.imageKey ?? null,
+          notes: s.notes ?? null,
+          submissionOrder: s.submissionOrder,
+          status: s.status,
+          createdAt: s.createdAt
+        }));
+
+        setRows(mapped);
       } catch (e) {
         const msg =
           e instanceof Error ? e.message : 'Failed to load submissions';

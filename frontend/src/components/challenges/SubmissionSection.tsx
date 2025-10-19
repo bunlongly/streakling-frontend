@@ -72,11 +72,17 @@ export default function SubmissionSection({
     try {
       const res = await api.challenge.getMySubmission(challengeId); // GET /challenges/:id/submissions?mine=1
       setMine((res.data ?? null) as Submission | null);
-    } catch (e: any) {
-      const m = e?.message ?? '';
+    } catch (e: unknown) {
+      const m =
+        e &&
+        typeof e === 'object' &&
+        'message' in e &&
+        typeof (e as any).message === 'string'
+          ? (e as any).message
+          : '';
       // treat "not submitted" as empty
       if (!String(m).toLowerCase().includes('not submitted')) {
-        setErr(m || 'Failed to load submission');
+        setErr((m as string) || 'Failed to load submission');
       }
       setMine(null);
     } finally {
@@ -95,8 +101,15 @@ export default function SubmissionSection({
     try {
       await api.challenge.withdrawSubmission(challengeId); // DELETE /challenges/:id/submissions
       await refresh();
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to withdraw');
+    } catch (e: unknown) {
+      const msg =
+        e &&
+        typeof e === 'object' &&
+        'message' in e &&
+        typeof (e as any).message === 'string'
+          ? (e as any).message
+          : 'Failed to withdraw';
+      setErr(msg);
     } finally {
       setWithdrawing(false);
     }
@@ -141,7 +154,8 @@ export default function SubmissionSection({
           </div>
 
           <div className='mt-4'>
-            <SubmissionForm challengeId={challengeId} onSubmitted={refresh} />
+            {/* Removed onSubmitted to match SubmissionForm's Props */}
+            <SubmissionForm challengeId={challengeId} />
           </div>
         </div>
       </MagicBorder>

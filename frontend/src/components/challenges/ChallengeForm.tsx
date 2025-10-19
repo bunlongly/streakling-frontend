@@ -1,3 +1,4 @@
+// src/components/challenges/ChallengeForm.tsx
 'use client';
 
 import { useMemo, useState } from 'react';
@@ -277,7 +278,8 @@ export default function ChallengeForm(props: Props) {
   // ---- submit ----
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) {
+    const ok = validate();
+    if (!ok) {
       const firstErr =
         errs.title ||
         errs.postingUrl ||
@@ -286,22 +288,31 @@ export default function ChallengeForm(props: Props) {
         errs.deadline ||
         errs.prizes ||
         'Please fix the highlighted fields.';
-      // show AFTER computing with current validate call values
-      const now = validate(); // recompute to get latest
       show({
         kind: 'error',
         title: 'Check form',
-        message:
-          firstErr ??
-          (!now
-            ? 'Please fix the highlighted fields.'
-            : 'Please fix the highlighted fields.')
+        message: firstErr
       });
       return;
     }
 
     setBusy(true);
     try {
+      // Build prizes payload; omit when empty (undefined), not null
+      const prizesPayload =
+        prizesSorted.length > 0
+          ? prizesSorted.map(p => ({
+              rank: p.rank,
+              label: p.label?.trim() || null,
+              amountCents:
+                typeof p.amountCents === 'number' &&
+                !Number.isNaN(p.amountCents)
+                  ? p.amountCents
+                  : null,
+              notes: p.notes?.trim() || null
+            }))
+          : undefined;
+
       const payload: CreateChallengeInput | UpdateChallengeInput = {
         title,
         description: description || null,
@@ -318,19 +329,7 @@ export default function ChallengeForm(props: Props) {
           url: im.url,
           sortOrder: typeof im.sortOrder === 'number' ? im.sortOrder : i
         })),
-        prizes:
-          prizesSorted.length > 0
-            ? prizesSorted.map(p => ({
-                rank: p.rank,
-                label: p.label?.trim() || null,
-                amountCents:
-                  typeof p.amountCents === 'number' &&
-                  !Number.isNaN(p.amountCents)
-                    ? p.amountCents
-                    : null,
-                notes: p.notes?.trim() || null
-              }))
-            : null
+        prizes: prizesPayload // ✅ undefined when none
       };
 
       const res =

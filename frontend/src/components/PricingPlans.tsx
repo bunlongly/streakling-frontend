@@ -1,33 +1,26 @@
+// src/components/PricingPlans.tsx
 'use client';
 
+import { useState } from 'react';
 import { Check, Star } from 'lucide-react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
-/**
- * Streakling Pricing Table — v2
- * Tweaks from feedback:
- * - Section heading is BLACK for better contrast
- * - Stronger brand gradient borders (primary/secondary/tertiary mix)
- * - Featured (Recommended) card is slightly larger and more prominent
- * - Cleaner, more professional spacing/typography
- */
-
 export type Plan = {
-  id: string;
+  id: 'free' | 'basic' | 'pro' | 'ultimate';
   name: string;
-  price: string; // "$0", "$7.99", etc.
-  period?: string; // "/month" (optional)
+  price: string;
+  period?: string;
   blurb?: string;
-  featured?: boolean; // Recommended
+  featured?: boolean;
   ctaLabel?: string;
-  ctaHref?: string;
+  ctaHref?: string; // used for free
   quota: {
     digitalCards: number;
     portfolios: number;
     canJoinChallenges: boolean;
-    canCreateChallenges?: number; // count (0 for none)
+    canCreateChallenges?: number;
   };
 };
 
@@ -54,7 +47,6 @@ const DEFAULT_PLANS: Plan[] = [
     period: '/month',
     blurb: 'More room to build your profile.',
     ctaLabel: 'Choose Basic',
-    ctaHref: '/billing/subscribe?plan=basic',
     quota: {
       digitalCards: 3,
       portfolios: 3,
@@ -70,7 +62,6 @@ const DEFAULT_PLANS: Plan[] = [
     blurb: 'Best value for active creators.',
     featured: true,
     ctaLabel: 'Go Pro',
-    ctaHref: '/billing/subscribe?plan=pro',
     quota: {
       digitalCards: 5,
       portfolios: 5,
@@ -85,7 +76,6 @@ const DEFAULT_PLANS: Plan[] = [
     period: '/month',
     blurb: 'Maximum flexibility and capacity.',
     ctaLabel: 'Choose Ultimate',
-    ctaHref: '/billing/subscribe?plan=ultimate',
     quota: {
       digitalCards: 7,
       portfolios: 7,
@@ -104,8 +94,18 @@ function Feature({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PlanCard({ plan }: { plan: Plan }) {
+function PlanCard({
+  plan,
+  onBuy,
+  buying
+}: {
+  plan: Plan;
+  onBuy: (planId: Plan['id']) => Promise<void>;
+  buying: boolean;
+}) {
   const isFeatured = plan.featured;
+  const isPaid = plan.id !== 'free';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -114,15 +114,13 @@ function PlanCard({ plan }: { plan: Plan }) {
       transition={{ duration: 0.35 }}
       className={clsx(
         'relative rounded-3xl p-[2px]',
-        // Stronger brand gradient border
-        'bg-[conic-gradient(at_10%_10%,#9e55f7, #447aee, #13b9a3, #9e55f7)]',
+        'bg-[conic-gradient(at_10%_10%,#9e55f7,#447aee,#13b9a3,#9e55f7)]',
         isFeatured
           ? 'shadow-2xl shadow-purple-400/25'
           : 'shadow-lg shadow-black/10',
         isFeatured && 'md:scale-[1.03]'
       )}
     >
-      {/* Inner card */}
       <div
         className={clsx(
           'rounded-3xl h-full w-full',
@@ -131,7 +129,6 @@ function PlanCard({ plan }: { plan: Plan }) {
           'ring-1 ring-black/5'
         )}
       >
-        {/* Ribbon */}
         {isFeatured && (
           <div className='absolute -top-4 right-4 inline-flex items-center gap-1 rounded-full bg-[#9e55f7] px-4 py-1.5 text-sm font-semibold text-white shadow-lg'>
             <Star className='h-4 w-4' aria-hidden /> Recommended
@@ -180,23 +177,22 @@ function PlanCard({ plan }: { plan: Plan }) {
             </Feature>
             {typeof plan.quota.canCreateChallenges === 'number' && (
               <Feature>
+                {' '}
                 Create {plan.quota.canCreateChallenges}{' '}
                 {plan.quota.canCreateChallenges === 1
                   ? 'challenge'
-                  : 'challenges'}
+                  : 'challenges'}{' '}
               </Feature>
             )}
           </ul>
 
           <div className='mt-auto'>
-            {plan.ctaHref ? (
+            {!isPaid ? (
               <Link
-                href={plan.ctaHref}
+                href={plan.ctaHref ?? '/signup'}
                 className={clsx(
                   'inline-flex w-full items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-medium',
-                  isFeatured
-                    ? 'bg-gradient-to-r from-[#9e55f7] via-[#447aee] to-[#13b9a3] text-white shadow hover:opacity-95'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-100'
+                  'bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-100'
                 )}
               >
                 {plan.ctaLabel ?? 'Select'}
@@ -204,14 +200,17 @@ function PlanCard({ plan }: { plan: Plan }) {
             ) : (
               <button
                 type='button'
+                onClick={() => onBuy(plan.id)}
+                disabled={buying}
                 className={clsx(
-                  'inline-flex w-full items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-medium',
+                  'inline-flex w-full items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-medium transition',
                   isFeatured
                     ? 'bg-gradient-to-r from-[#9e55f7] via-[#447aee] to-[#13b9a3] text-white shadow hover:opacity-95'
-                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-100'
+                    : 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-100',
+                  buying && 'opacity-60 cursor-not-allowed'
                 )}
               >
-                {plan.ctaLabel ?? 'Select'}
+                {buying ? 'Opening checkout…' : plan.ctaLabel ?? 'Select'}
               </button>
             )}
           </div>
@@ -221,14 +220,48 @@ function PlanCard({ plan }: { plan: Plan }) {
   );
 }
 
-export default function PricingTable({
+export default function PricingPlans({
   plans = DEFAULT_PLANS
 }: {
   plans?: Plan[];
 }) {
+  const [busyId, setBusyId] = useState<Plan['id'] | null>(null);
+
+  const onBuy = async (planId: Plan['id']) => {
+    if (planId === 'free') return;
+
+    try {
+      setBusyId(planId);
+      const base = process.env.NEXT_PUBLIC_BACKEND_URL;
+      if (!base) {
+        alert('Missing NEXT_PUBLIC_BACKEND_URL');
+        return;
+      }
+
+      const res = await fetch(`${base}/api/billing/checkout`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planId })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.url) {
+        window.location.href = data.url; // Stripe Checkout
+      } else {
+        console.error('Checkout failed:', res.status, data);
+        alert(data?.message ?? 'Could not start checkout.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Network error starting checkout.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <section className='relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8'>
-      {/* Soft background flourish */}
       <div aria-hidden className='pointer-events-none absolute inset-0 -z-10'>
         <div className='mx-auto h-72 w-72 -translate-y-8 rounded-full bg-[#9e55f7]/15 blur-3xl sm:h-96 sm:w-96' />
         <div className='mx-auto mt-[-4rem] h-72 w-72 rounded-full bg-[#447aee]/15 blur-3xl sm:h-96 sm:w-96' />
@@ -245,11 +278,15 @@ export default function PricingTable({
 
       <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-4'>
         {plans.map(p => (
-          <PlanCard key={p.id} plan={p} />
+          <PlanCard
+            key={p.id}
+            plan={p}
+            onBuy={onBuy}
+            buying={busyId === p.id}
+          />
         ))}
       </div>
 
-      {/* Tiny legal note */}
       <p className='mt-6 text-center text-xs text-gray-500'>
         Prices shown in USD per month. Taxes may apply.
       </p>

@@ -20,11 +20,13 @@ function previewFromAnywhere(key?: string | null, url?: string | null) {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || '';
 
-type Props = { params: { username: string } };
+type Props = { params: Promise<{ username: string }> }; // ✅ params is a Promise in Next 15
 
 export default async function PublicProfilePage({ params }: Props) {
+  const { username } = await params; // ✅ await the params
+
   const res = await api.profile
-    .publicGetByUsername(params.username, { cache: 'no-store' })
+    .publicGetByUsername(username, { cache: 'no-store' })
     .catch(() => null);
   if (!res) notFound();
 
@@ -33,13 +35,11 @@ export default async function PublicProfilePage({ params }: Props) {
   const avatarSrc = previewFromAnywhere(p.avatarKey, p.avatarUrl ?? null);
 
   const profileUrl = SITE
-    ? `${SITE}/profile/${encodeURIComponent(params.username)}`
-    : `/profile/${encodeURIComponent(params.username)}`;
+    ? `${SITE}/profile/${encodeURIComponent(username)}`
+    : `/profile/${encodeURIComponent(username)}`;
 
   const primaryIndustry = p.industries?.[0]?.name ?? 'Member';
-  const portfolioHref = `/profile/${encodeURIComponent(
-    params.username
-  )}/portfolio`;
+  const portfolioHref = `/profile/${encodeURIComponent(username)}/portfolio`;
   const fallbackLetter = (p.displayName || p.username || 'C')
     .trim()
     .charAt(0)
@@ -48,7 +48,7 @@ export default async function PublicProfilePage({ params }: Props) {
   return (
     <div className='mx-auto px-4 py-8 max-w-[480px]'>
       <FlipCard
-        className='mx-auto w-full max-w-[380px] h-[600px]' // <- smaller overall
+        className='mx-auto w-full max-w-[380px] h-[600px]'
         front={
           <MagicBorder radius='rounded-[22px]' className='h-full'>
             <div className='h-full rounded-[20px] overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)]'>
@@ -103,7 +103,7 @@ export default async function PublicProfilePage({ params }: Props) {
                 </div>
               </div>
 
-              {/* QR (no borders, no actions; won’t flip due to data-stopflip) */}
+              {/* QR */}
               <div className='h-[66%] px-4 py-5'>
                 <div className='mx-auto w-full max-w-[260px]'>
                   <ProfileQR
@@ -181,7 +181,7 @@ export default async function PublicProfilePage({ params }: Props) {
                   </div>
                 ) : null}
 
-                {/* CTAs — rounded chips; marked stopflip */}
+                {/* CTAs */}
                 <div className='mt-4 flex flex-wrap gap-2'>
                   <Link
                     href={portfolioHref}
@@ -235,7 +235,6 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className='grid grid-cols-[96px_1fr] items-start gap-3 py-2'>
       <div className='text-gray-600 leading-6'>{label}</div>
-      {/* wrap long emails/links safely */}
       <div className='font-medium text-gray-900 leading-6 min-w-0 break-words break-all'>
         {value}
       </div>

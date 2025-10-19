@@ -1,3 +1,4 @@
+// src/components/portfolio/PortfolioExploreGrid.tsx
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -36,7 +37,11 @@ export default function PortfolioExploreGrid() {
     setState(s => ({ ...s, isLoading: true, error: null }));
     seenIdsRef.current.clear();
     try {
-      const r = await api.portfolio.listPublic({ q, limit: 24 });
+      // TS-safe: pass q as an extra field using a narrowed cast
+      const r = await api.portfolio.listPublic({
+        limit: 24,
+        ...(q ? ({ q } as any) : {})
+      });
       const rows = Array.isArray(r?.data?.items)
         ? (r.data.items as Portfolio[])
         : [];
@@ -67,9 +72,9 @@ export default function PortfolioExploreGrid() {
     setState(s => ({ ...s, isLoadingMore: true, error: null }));
     try {
       const r = await api.portfolio.listPublic({
-        q: state.q,
         limit: 24,
-        cursor: state.nextCursor
+        cursor: state.nextCursor,
+        ...(state.q ? ({ q: state.q } as any) : {})
       });
       const rows = Array.isArray(r?.data?.items)
         ? (r.data.items as Portfolio[])

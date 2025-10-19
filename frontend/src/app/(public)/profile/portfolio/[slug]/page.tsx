@@ -1,4 +1,4 @@
-// src/app/portfolio/[slug]/page.tsx
+// src/app/(public)/profile/portfolio/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import { api, HttpError } from '@/lib/api';
 import type { Portfolio } from '@/types/portfolio';
@@ -22,9 +22,8 @@ type SubImage = NonNullable<Portfolio['subImages']>[number];
 type Project = NonNullable<Portfolio['projects']>[number];
 type Experience = NonNullable<Portfolio['experiences']>[number];
 type Education = NonNullable<Portfolio['educations']>[number];
-type ProjectSubImage = NonNullable<Project['subImages']>[number];
+
 type TopVideo = NonNullable<Portfolio['videoLinks']>[number];
-type ProjectVideo = NonNullable<Project['videoLinks']>[number];
 
 /* ---------------- helpers ---------------- */
 const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || null;
@@ -69,24 +68,30 @@ function getAbout(p: Portfolio) {
 }
 const getAvatar = (p: Portfolio, about = getAbout(p)) =>
   urlFor(about.avatarKey ?? null) ?? about.avatarUrl ?? null;
+
 const getBanner = (p: Portfolio, about = getAbout(p)) =>
-  urlFor(about.bannerKey ?? null) ??
-  about.bannerUrl ??
-  null ??
-  urlFor(p.mainImageKey);
+  urlFor(about.bannerKey ?? null) ?? about.bannerUrl ?? urlFor(p.mainImageKey); // ✅ removed `?? null ??`
 
 /** Try common locations your API might place a public digital card slug */
-function getPublicCardSlug(p: Portfolio): string | null {
-  const candidates = [
-    (p as any).digitalCardSlug,
-    (p as any).publicCardSlug,
-    (p as any).cardSlug,
-    (p as any)?.owner?.digitalCardSlug,
-    (p as any)?.user?.digitalCardSlug
+type WithCardSlug = {
+  digitalCardSlug?: string | null;
+  publicCardSlug?: string | null;
+  cardSlug?: string | null;
+  owner?: { digitalCardSlug?: string | null } | null;
+  user?: { digitalCardSlug?: string | null } | null;
+};
+function getPublicCardSlug(p: Portfolio & WithCardSlug): string | null {
+  const candidates: Array<string | null | undefined> = [
+    p.digitalCardSlug,
+    p.publicCardSlug,
+    p.cardSlug,
+    p.owner?.digitalCardSlug,
+    p.user?.digitalCardSlug
   ];
-  for (const c of candidates)
-    if (typeof c === 'string' && c.trim()) return c.trim();
-  return null;
+  const found = candidates.find(
+    (c): c is string => typeof c === 'string' && c.trim().length > 0
+  );
+  return found ? found.trim() : null;
 }
 
 /* tiny UI bits */
@@ -140,7 +145,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
     const about = getAbout(p);
     const avatar = getAvatar(p, about);
     const banner = getBanner(p, about);
-    const cardSlug = getPublicCardSlug(p);
+    const cardSlug = getPublicCardSlug(p as Portfolio & WithCardSlug);
 
     const fullName =
       (
@@ -348,7 +353,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                 </section>
               )}
 
-              {/* ===== New: Top-level Video Links ===== */}
+              {/* ===== Top-level Video Links ===== */}
               {topVideos.length > 0 && (
                 <section>
                   <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>
@@ -386,14 +391,14 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                     Projects
                   </h2>
 
-                  {/* Responsive grid, clean image + text + tags + (videos) */}
+                  {/* Responsive grid */}
                   <div className='grid sm:grid-cols-2 gap-6'>
                     {projects.map((proj, i) => {
                       const pSub: Project['subImages'] = proj.subImages ?? [];
                       const pVids: Project['videoLinks'] =
                         proj.videoLinks ?? [];
-                      const pTags = Array.isArray(proj.tags)
-                        ? (proj.tags as any[])
+                      const pTags: string[] = Array.isArray(proj.tags)
+                        ? proj.tags.map(String)
                         : [];
 
                       return (
@@ -415,10 +420,10 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                             <div className='mt-1 flex flex-wrap gap-2'>
                               {pTags.slice(0, 12).map((t, idx) => (
                                 <span
-                                  key={`${String(t)}-${idx}`}
+                                  key={`${t}-${idx}`}
                                   className='text-[11px] px-2.5 py-0.5 rounded-full bg-neutral-100 text-neutral-700'
                                 >
-                                  {String(t)}
+                                  {t}
                                 </span>
                               ))}
                             </div>

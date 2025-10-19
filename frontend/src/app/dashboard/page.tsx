@@ -1,7 +1,7 @@
 // src/app/dashboard/page.tsx
 'use client';
 
-import Header from '@/components/Header';
+
 import AuthGate from '@/components/AuthGate';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
 import { api } from '@/lib/api';
@@ -22,7 +22,6 @@ export default function DashboardPage() {
   return (
     <AuthGate>
       <main className='min-h-dvh bg-brand-mix'>
-        <Header />
         <section className='max-w-3xl mx-auto mt-16 p-6 card-surface'>
           <h1 className='h1'>Dashboard</h1>
           <p className='mt-2 muted'>

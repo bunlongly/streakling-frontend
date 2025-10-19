@@ -1,7 +1,13 @@
+// src/components/profile/ProfileForm.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm, type SubmitErrorHandler } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import {
+  Controller,
+  useForm,
+  type SubmitErrorHandler,
+  type Resolver
+} from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { PublicProfile } from '@/types/profile';
 import { api } from '@/lib/api';
@@ -91,7 +97,9 @@ export default function ProfileForm({ initial }: { initial: PublicProfile }) {
     reset,
     formState: { errors, isSubmitting }
   } = useForm<UpdateMyProfileFormValues>({
-    resolver: zodResolver(updateMyProfileSchema),
+    resolver: zodResolver(
+      updateMyProfileSchema
+    ) as Resolver<UpdateMyProfileFormValues>,
     defaultValues: {
       username: initial.username ?? '',
       displayName: initial.displayName ?? '',

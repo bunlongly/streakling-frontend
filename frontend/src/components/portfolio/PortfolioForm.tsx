@@ -9,7 +9,8 @@ import {
   type UseFormWatch,
   type UseFormSetValue,
   type Control,
-  type FieldErrors
+  type FieldErrors,
+  type Resolver
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -165,12 +166,15 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     watch,
     setValue
   } = useForm<PortfolioFormValues>({
-    resolver: zodResolver(createPortfolioSchema),
+    // CHANGE: cast resolver so its output type matches PortfolioFormValues
+    resolver: zodResolver(
+      createPortfolioSchema
+    ) as Resolver<PortfolioFormValues>,
     defaultValues: {
       slug: initial?.slug ?? '',
       publishStatus: initial?.publishStatus ?? 'DRAFT',
       title: initial?.title ?? '',
-      description: initial?.description ?? undefined,
+      description: initial?.description ?? undefined, // null -> undefined
       mainImageKey: initial?.mainImageKey ?? undefined,
       subImages: mapSubImages(
         initial?.subImages as
@@ -193,7 +197,7 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         slug: initial.slug ?? '',
         publishStatus: initial.publishStatus ?? 'DRAFT',
         title: initial.title ?? '',
-        description: initial.description ?? undefined,
+        description: initial.description ?? undefined, // null -> undefined
         mainImageKey: initial.mainImageKey ?? undefined,
         subImages: mapSubImages(
           initial.subImages as
