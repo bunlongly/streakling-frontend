@@ -8,7 +8,8 @@ import {
   type SubmitHandler,
   type SubmitErrorHandler,
   type Resolver,
-  type FieldErrors
+  type FieldErrors,
+  FieldPath
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import ImageUploader from '@/components/uploader/ImageUploader';
@@ -43,8 +44,6 @@ function slugify(input: string) {
 }
 
 function sanitize(values: DigitalCardFormValues): DigitalCardFormValues {
-  // FIX: never return `null`; collapse null/empty-string to `undefined`,
-  // and return the trimmed string when present.
   const toUndef = (s: string | undefined | null): string | undefined => {
     if (s == null) return undefined;
     const t = s.trim();
@@ -118,12 +117,65 @@ function firstErrorMessage(
   return scan(errs);
 }
 
-/** Inputs now force width + allow shrinking in grids */
-const inputCls =
-  'w-full card-surface rounded-xl border border-token px-3 py-2 text-[15px] ' +
-  'focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent shadow-sm';
+/** Find first invalid field path to focus */
+function firstErrorPath(
+  errs: FieldErrors<DigitalCardFormValues>,
+  prefix: string[] = []
+): FieldPath<DigitalCardFormValues> | null {
+  for (const [k, v] of Object.entries(errs)) {
+    if (!v) continue;
+    const path = [...prefix, k];
+    if (
+      typeof v === 'object' &&
+      'message' in v &&
+      typeof (v as any).message === 'string'
+    ) {
+      return path.join('.') as FieldPath<DigitalCardFormValues>;
+    }
+    if (Array.isArray(v)) {
+      for (let i = 0; i < v.length; i++) {
+        const inner = v[i] as FieldErrors<DigitalCardFormValues>;
+        const found = firstErrorPath(inner, [...path, String(i)]);
+        if (found) return found;
+      }
+    } else if (typeof v === 'object') {
+      const found = firstErrorPath(
+        v as FieldErrors<DigitalCardFormValues>,
+        path
+      );
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Dev-only: flatten errors to messages (drops DOM refs to avoid circular JSON) */
+function flattenErrorMessages(obj: unknown): unknown {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(flattenErrorMessages);
+  const rec = obj as Record<string, unknown>;
+  if (typeof rec.message === 'string') return rec.message;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(rec)) {
+    if (k === 'ref') continue; // DOM node -> circular
+    out[k] = flattenErrorMessages(v);
+  }
+  return out;
+}
+
+/** Inputs styling */
+const inputBase =
+  'w-full card-surface rounded-xl border px-3 py-2 text-[15px] shadow-sm ' +
+  'focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent';
+const inputOk = inputBase + ' border-token';
+const inputErr =
+  inputBase +
+  ' border-red-500 ring-1 ring-red-300 focus:ring-red-400 focus:border-red-500';
 
 const labelCls = 'text-sm font-medium';
+const helpErr = 'text-red-500 text-sm mt-1';
+const helpMuted = 'muted text-xs';
+
 const sectionCardCls =
   'rounded-2xl border border-token bg-surface p-4 md:p-5 ' +
   'shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]';
@@ -151,7 +203,8 @@ export default function ProfileCardForm({ initial, id }: Props) {
     setValue,
     watch,
     control,
-    formState: { errors }
+    setFocus,
+    formState: { errors, isSubmitting }
   } = useForm<DigitalCardFormValues>({
     resolver: zodResolver(digitalCardSchema) as Resolver<DigitalCardFormValues>,
     defaultValues: {
@@ -241,8 +294,28 @@ export default function ProfileCardForm({ initial, id }: Props) {
     const msg = firstErrorMessage(errs) ?? 'Please fix the highlighted fields.';
     setServerMessage(msg);
     flash.show({ kind: 'error', title: 'Form error', message: msg });
-    console.error('Form invalid:', errs);
+
+    // Focus & scroll to the first invalid field
+    const path = firstErrorPath(errs);
+    if (path) {
+      setFocus(path as any, { shouldSelect: true });
+      const el = document.querySelector(`[name="${path}"]`);
+      if (el)
+        (el as HTMLElement).scrollIntoView({
+          block: 'center',
+          behavior: 'smooth'
+        });
+    }
+
+    // Keep console log but without circular refs
+    console.error('Form invalid:', flattenErrorMessages(errs));
   };
+
+  // Helper to pick the right class & aria-invalid (boolean to satisfy TS)
+  const withErr = (hasErr: boolean) => ({
+    className: hasErr ? inputErr : inputOk,
+    'aria-invalid': hasErr as boolean
+  });
 
   return (
     <form onSubmit={handleSubmit(onSubmit, onInvalid)} className='grid gap-6'>
@@ -294,11 +367,11 @@ export default function ProfileCardForm({ initial, id }: Props) {
             </label>
             <input
               id='firstName'
-              className={inputCls}
               {...register('firstName')}
+              {...withErr(!!errors.firstName)}
             />
             {errors.firstName && (
-              <p className='text-red-500 text-sm'>{errors.firstName.message}</p>
+              <p className={helpErr}>{errors.firstName.message}</p>
             )}
           </div>
 
@@ -308,11 +381,11 @@ export default function ProfileCardForm({ initial, id }: Props) {
             </label>
             <input
               id='lastName'
-              className={inputCls}
               {...register('lastName')}
+              {...withErr(!!errors.lastName)}
             />
             {errors.lastName && (
-              <p className='text-red-500 text-sm'>{errors.lastName.message}</p>
+              <p className={helpErr}>{errors.lastName.message}</p>
             )}
           </div>
 
@@ -320,9 +393,13 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='appName' className={labelCls}>
               App name (handle)
             </label>
-            <input id='appName' className={inputCls} {...register('appName')} />
+            <input
+              id='appName'
+              {...register('appName')}
+              {...withErr(!!errors.appName)}
+            />
             {errors.appName && (
-              <p className='text-red-500 text-sm'>{errors.appName.message}</p>
+              <p className={helpErr}>{errors.appName.message}</p>
             )}
           </div>
         </div>
@@ -332,11 +409,13 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='slug' className={labelCls}>
               Slug
             </label>
-            <input id='slug' className={inputCls} {...register('slug')} />
-            {errors.slug && (
-              <p className='text-red-500 text-sm'>{errors.slug.message}</p>
-            )}
-            <p className='muted text-xs'>
+            <input
+              id='slug'
+              {...register('slug')}
+              {...withErr(!!errors.slug)}
+            />
+            {errors.slug && <p className={helpErr}>{errors.slug.message}</p>}
+            <p className={helpMuted}>
               Lowercase, numbers, hyphens. Public URL:{' '}
               <code>/your-username/{`{slug}`}/digitalcard</code>
             </p>
@@ -346,10 +425,12 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='role' className={labelCls}>
               Role
             </label>
-            <input id='role' className={inputCls} {...register('role')} />
-            {errors.role && (
-              <p className='text-red-500 text-sm'>{errors.role.message}</p>
-            )}
+            <input
+              id='role'
+              {...register('role')}
+              {...withErr(!!errors.role)}
+            />
+            {errors.role && <p className={helpErr}>{errors.role.message}</p>}
           </div>
         </div>
       </section>
@@ -363,13 +444,17 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='status' className={labelCls}>
               Status
             </label>
-            <select id='status' className={inputCls} {...register('status')}>
+            <select
+              id='status'
+              {...register('status')}
+              {...withErr(!!errors.status)}
+            >
               <option value='STUDENT'>Student</option>
               <option value='GRADUATE'>Graduate</option>
               <option value='WORKING'>Working</option>
             </select>
             {errors.status && (
-              <p className='text-red-500 text-sm'>{errors.status.message}</p>
+              <p className={helpErr}>{errors.status.message}</p>
             )}
           </div>
 
@@ -379,13 +464,16 @@ export default function ProfileCardForm({ initial, id }: Props) {
             </label>
             <select
               id='publishStatus'
-              className={inputCls}
               {...register('publishStatus')}
+              {...withErr(!!errors.publishStatus)}
             >
               <option value='DRAFT'>Draft</option>
               <option value='PRIVATE'>Private</option>
               <option value='PUBLISHED'>Published</option>
             </select>
+            {errors.publishStatus && (
+              <p className={helpErr}>{errors.publishStatus.message}</p>
+            )}
           </div>
         </div>
       </section>
@@ -400,11 +488,11 @@ export default function ProfileCardForm({ initial, id }: Props) {
           <textarea
             id='shortBio'
             rows={3}
-            className={inputCls}
             {...register('shortBio')}
+            {...withErr(!!errors.shortBio)}
           />
           {errors.shortBio && (
-            <p className='text-red-500 text-sm'>{errors.shortBio.message}</p>
+            <p className={helpErr}>{errors.shortBio.message}</p>
           )}
         </div>
       </section>
@@ -417,7 +505,14 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='company' className={labelCls}>
               Company
             </label>
-            <input id='company' className={inputCls} {...register('company')} />
+            <input
+              id='company'
+              {...register('company')}
+              {...withErr(!!errors.company)}
+            />
+            {errors.company && (
+              <p className={helpErr}>{errors.company.message}</p>
+            )}
           </div>
 
           <div className='grid gap-2 min-w-0'>
@@ -426,16 +521,26 @@ export default function ProfileCardForm({ initial, id }: Props) {
             </label>
             <input
               id='university'
-              className={inputCls}
               {...register('university')}
+              {...withErr(!!errors.university)}
             />
+            {errors.university && (
+              <p className={helpErr}>{errors.university.message}</p>
+            )}
           </div>
 
           <div className='grid gap-2 min-w-0'>
             <label htmlFor='country' className={labelCls}>
               Country
             </label>
-            <input id='country' className={inputCls} {...register('country')} />
+            <input
+              id='country'
+              {...register('country')}
+              {...withErr(!!errors.country)}
+            />
+            {errors.country && (
+              <p className={helpErr}>{errors.country.message}</p>
+            )}
           </div>
         </div>
       </section>
@@ -449,7 +554,12 @@ export default function ProfileCardForm({ initial, id }: Props) {
             <label htmlFor='phone' className={labelCls}>
               Phone (sensitive)
             </label>
-            <input id='phone' className={inputCls} {...register('phone')} />
+            <input
+              id='phone'
+              {...register('phone')}
+              {...withErr(!!errors.phone)}
+            />
+            {errors.phone && <p className={helpErr}>{errors.phone.message}</p>}
           </div>
           <div className='grid gap-2 min-w-0'>
             <label htmlFor='religion' className={labelCls}>
@@ -457,9 +567,12 @@ export default function ProfileCardForm({ initial, id }: Props) {
             </label>
             <input
               id='religion'
-              className={inputCls}
               {...register('religion')}
+              {...withErr(!!errors.religion)}
             />
+            {errors.religion && (
+              <p className={helpErr}>{errors.religion.message}</p>
+            )}
           </div>
         </div>
 
@@ -516,116 +629,139 @@ export default function ProfileCardForm({ initial, id }: Props) {
         </div>
 
         <div className='grid gap-4'>
-          {fields.map((field, idx) => (
-            <div
-              key={field.id}
-              className='relative overflow-hidden rounded-2xl border border-token bg-white/70 p-3 md:p-4 shadow-sm'
-            >
-              <div className='grid gap-3 md:grid-cols-12'>
-                <div className='md:col-span-3 grid gap-1 min-w-0'>
-                  <label className='text-xs font-medium'>Platform</label>
-                  <select
-                    className={inputCls}
-                    {...register(`socials.${idx}.platform` as const)}
-                  >
-                    {SOCIAL_PLATFORMS.map(p => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className='md:col-span-3 grid gap-1 min-w-0'>
-                  <label className='text-xs font-medium'>Handle</label>
-                  <input
-                    className={inputCls}
-                    placeholder='@username'
-                    {...register(`socials.${idx}.handle` as const)}
-                  />
-                </div>
-
-                <div className='md:col-span-4 grid gap-1 min-w-0'>
-                  <label className='text-xs font-medium'>URL</label>
-                  <input
-                    className={inputCls}
-                    placeholder='https://…'
-                    {...register(`socials.${idx}.url` as const)}
-                  />
-                </div>
-
-                {/* Order + Public kept inside span, fixed widths to prevent overflow */}
-                <div className='md:col-span-2 grid grid-cols-[auto_1fr] items-center gap-3'>
-                  <div className='grid gap-1'>
-                    <label className='text-xs font-medium'>Order</label>
-                    <input
-                      type='number'
-                      inputMode='numeric'
-                      className={
-                        inputCls +
-                        ' w-24 md:w-28 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
-                      }
-                      {...register(`socials.${idx}.sortOrder` as const, {
-                        valueAsNumber: true
-                      })}
-                    />
+          {fields.map((field, idx) => {
+            const err = errors.socials?.[idx];
+            return (
+              <div
+                key={field.id}
+                className='relative overflow-hidden rounded-2xl border border-token bg-white/70 p-3 md:p-4 shadow-sm'
+              >
+                <div className='grid gap-3 md:grid-cols-12'>
+                  <div className='md:col-span-3 grid gap-1 min-w-0'>
+                    <label className='text-xs font-medium'>Platform</label>
+                    <select
+                      {...register(`socials.${idx}.platform` as const)}
+                      {...withErr(!!err?.platform)}
+                    >
+                      {SOCIAL_PLATFORMS.map(p => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    {err?.platform?.message && (
+                      <p className={helpErr}>{err.platform.message}</p>
+                    )}
                   </div>
-                  <label className='inline-flex items-center gap-2 whitespace-nowrap'>
-                    <input
-                      type='checkbox'
-                      {...register(`socials.${idx}.isPublic` as const)}
-                    />
-                    <span className='text-sm'>Public</span>
-                  </label>
-                </div>
-              </div>
 
-              {/* Row actions */}
-              <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
-                <div className='text-xs text-black/60'>Row #{idx + 1}</div>
-                <div className='flex items-center gap-2'>
-                  {idx > 0 && (
+                  <div className='md:col-span-3 grid gap-1 min-w-0'>
+                    <label className='text-xs font-medium'>Handle</label>
+                    <input
+                      placeholder='@username'
+                      {...register(`socials.${idx}.handle` as const)}
+                      {...withErr(!!err?.handle)}
+                    />
+                    {err?.handle?.message && (
+                      <p className={helpErr}>{err.handle.message}</p>
+                    )}
+                  </div>
+
+                  <div className='md:col-span-4 grid gap-1 min-w-0'>
+                    <label className='text-xs font-medium'>URL</label>
+                    <input
+                      placeholder='https://…'
+                      {...register(`socials.${idx}.url` as const)}
+                      {...withErr(!!err?.url)}
+                    />
+                    {err?.url?.message && (
+                      <p className={helpErr}>{err.url.message}</p>
+                    )}
+                  </div>
+
+                  <div className='md:col-span-2 grid grid-cols-[auto_1fr] items-center gap-3'>
+                    <div className='grid gap-1'>
+                      <label className='text-xs font-medium'>Order</label>
+                      <input
+                        type='number'
+                        inputMode='numeric'
+                        className={
+                          (err?.sortOrder ? inputErr : inputOk) +
+                          ' w-24 md:w-28 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
+                        }
+                        aria-invalid={!!err?.sortOrder}
+                        {...register(`socials.${idx}.sortOrder` as const, {
+                          valueAsNumber: true
+                        })}
+                      />
+                      {err?.sortOrder?.message && (
+                        <p className={helpErr}>{err.sortOrder.message}</p>
+                      )}
+                    </div>
+                    <label className='inline-flex items-center gap-2 whitespace-nowrap'>
+                      <input
+                        type='checkbox'
+                        {...register(`socials.${idx}.isPublic` as const)}
+                      />
+                      <span className='text-sm'>Public</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Row actions */}
+                <div className='mt-3 flex flex-wrap items-center justify-between gap-2'>
+                  <div className='text-xs text-black/60'>Row #{idx + 1}</div>
+                  <div className='flex items-center gap-2'>
+                    {idx > 0 && (
+                      <button
+                        type='button'
+                        className={btnGhost}
+                        aria-label='Move up'
+                        onClick={() => swap(idx, idx - 1)}
+                      >
+                        ▲ Up
+                      </button>
+                    )}
+                    {idx < fields.length - 1 && (
+                      <button
+                        type='button'
+                        className={btnGhost}
+                        aria-label='Move down'
+                        onClick={() => swap(idx, idx + 1)}
+                      >
+                        ▼ Down
+                      </button>
+                    )}
                     <button
                       type='button'
-                      className={btnGhost}
-                      aria-label='Move up'
-                      onClick={() => swap(idx, idx - 1)}
+                      className={btnGhost + ' text-red-600'}
+                      onClick={() => remove(idx)}
                     >
-                      ▲ Up
+                      Remove
                     </button>
-                  )}
-                  {idx < fields.length - 1 && (
-                    <button
-                      type='button'
-                      className={btnGhost}
-                      aria-label='Move down'
-                      onClick={() => swap(idx, idx + 1)}
-                    >
-                      ▼ Down
-                    </button>
-                  )}
-                  <button
-                    type='button'
-                    className={btnGhost + ' text-red-600'}
-                    onClick={() => remove(idx)}
-                  >
-                    Remove
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {firstErrorMessage(errors) && (
-            <p className='text-red-500 text-sm'>{firstErrorMessage(errors)}</p>
+            <p className={helpErr}>{firstErrorMessage(errors)}</p>
           )}
         </div>
       </section>
 
       {/* Actions */}
       <div className='flex justify-end'>
-        <button type='submit' disabled={loading} className={btnPrimary}>
-          {loading ? 'Saving…' : id ? 'Update card' : 'Create card'}
+        <button
+          type='submit'
+          disabled={loading || isSubmitting}
+          className={btnPrimary}
+        >
+          {loading || isSubmitting
+            ? 'Saving…'
+            : id
+            ? 'Update card'
+            : 'Create card'}
         </button>
       </div>
 
@@ -642,11 +778,11 @@ export default function ProfileCardForm({ initial, id }: Props) {
         </div>
       )}
 
-      {/* Dev-only error visibility */}
+      {/* Dev-only error visibility (SAFE: no circular refs) */}
       {process.env.NODE_ENV === 'development' &&
         Object.keys(errors).length > 0 && (
           <pre className='text-xs whitespace-pre-wrap bg-black/30 p-3 rounded mt-2'>
-            {JSON.stringify(errors, null, 2)}
+            {JSON.stringify(flattenErrorMessages(errors), null, 2)}
           </pre>
         )}
 

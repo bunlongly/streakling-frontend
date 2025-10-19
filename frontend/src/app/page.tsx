@@ -11,10 +11,10 @@ import OverviewShowcase from '@/components/OverviewShowcase';
 /** Typewriter: types ➜ holds ➜ deletes ➜ repeats */
 function TypeLoop({
   texts = ['Your creator identity, all in one link.'],
-  typeMs = 65, // slower typing
-  deleteMs = 42, // slower delete
+  typeMs = 65,
+  deleteMs = 42,
   startDelay = 220,
-  holdMs = 1400, // longer hold before delete
+  holdMs = 1400,
   caret = '|',
   loop = true
 }: {
@@ -111,6 +111,26 @@ function TypeLoop({
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  /** 🔒 Ensure initial scroll is at top on a fresh load (no hash) */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!window.location.hash) {
+      const prev = history.scrollRestoration as 'auto' | 'manual' | undefined;
+      try {
+        history.scrollRestoration = 'manual';
+      } catch {}
+      // Snap to top immediately on mount to avoid accidental y>0
+      window.scrollTo(0, 0);
+      // Restore browser default after a short tick
+      const id = window.setTimeout(() => {
+        try {
+          history.scrollRestoration = prev ?? 'auto';
+        } catch {}
+      }, 300);
+      return () => window.clearTimeout(id);
+    }
+  }, []);
+
   // ✅ Smooth scroll ONLY while this page is mounted
   useEffect(() => {
     const root = document.documentElement;
@@ -121,6 +141,7 @@ export default function HomePage() {
     };
   }, []);
 
+  // Autoplay/pause hero video when in/out of view
   useEffect(() => {
     const el = videoRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
@@ -141,7 +162,8 @@ export default function HomePage() {
   return (
     <main className='min-h-dvh'>
       {/* ===== 100vh Hero with /video-intro.mp4 ===== */}
-      <section className='relative h-[100svh] w-full overflow-hidden'>
+      {/* Use 100dvh to avoid address-bar resize nudging the page on mobile */}
+      <section className='relative h-[100dvh] w-full overflow-hidden'>
         <video
           ref={videoRef}
           className='absolute inset-0 h-full w-full object-cover'
@@ -150,6 +172,7 @@ export default function HomePage() {
           loop
           playsInline
           poster='/hero-poster.jpg'
+          preload='metadata' /* helps first paint without heavy buffering */
         >
           <source src='/video-intro.mp4' type='video/mp4' />
         </video>
@@ -164,7 +187,7 @@ export default function HomePage() {
               <h1
                 className={[
                   'inline-flex items-baseline font-sans font-extrabold tracking-tight text-white drop-shadow',
-                  'text-[clamp(28px,6vw,64px)]', // responsive single line
+                  'text-[clamp(28px,6vw,64px)]',
                   'whitespace-nowrap'
                 ].join(' ')}
                 aria-label='Your creator identity, all in one link.'
