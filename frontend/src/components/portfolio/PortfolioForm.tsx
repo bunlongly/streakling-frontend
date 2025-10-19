@@ -10,7 +10,8 @@ import {
   type UseFormSetValue,
   type Control,
   type FieldErrors,
-  type Resolver
+  type Resolver,
+  FieldPath
 } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -31,24 +32,37 @@ type Props = {
   initial?: Partial<Portfolio> | null;
 };
 
-/* ---------- UI tokens to match digital card ---------- */
-const inputCls =
-  'w-full card-surface rounded-xl border border-token px-3 py-2 text-[15px] ' +
-  'focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent shadow-sm';
-const textareaCls = inputCls + ' align-top';
-const selectCls = inputCls;
+/* ---------- Strong subtypes to avoid any ---------- */
+type SubImageForm = { key: string; url: string; sortOrder?: number };
+type ProjectForm = NonNullable<PortfolioFormValues['projects']>[number];
+type VideoLinkForm = NonNullable<PortfolioFormValues['videoLinks']>[number];
+type ExperienceForm = NonNullable<PortfolioFormValues['experiences']>[number];
+type EducationForm = NonNullable<PortfolioFormValues['educations']>[number];
+type AboutForm = PortfolioFormValues['about'];
+
+/* ---------- UI tokens ---------- */
+const inputBase =
+  'w-full card-surface rounded-xl border px-3 py-2 text-[15px] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent';
+const inputOk = inputBase + ' border-token';
+const inputErr =
+  inputBase +
+  ' border-red-500 ring-1 ring-red-300 focus:ring-red-400 focus:border-red-500';
+
+const textareaOk = inputOk + ' align-top';
+const textareaErr = inputErr + ' align-top';
+const selectOk = inputOk;
+const selectErr = inputErr;
+
 const labelCls = 'text-sm font-medium';
 const sublabelCls = 'muted text-xs';
 const sectionCardCls =
-  'rounded-2xl border border-token bg-white/70 p-4 md:p-5 ' +
-  'shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]';
+  'rounded-2xl border border-token bg-white/70 p-4 md:p-5 shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]';
 
 const btnBase =
   'inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition';
 const btnPrimary =
   btnBase +
-  ' text-white bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] ' +
-  'hover:brightness-110 active:brightness-95 shadow-[0_8px_24px_rgba(77,56,209,0.35)] disabled:opacity-60';
+  ' text-white bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-secondary)] hover:brightness-110 active:brightness-95 shadow-[0_8px_24px_rgba(77,56,209,0.35)] disabled:opacity-60';
 const btnOutline =
   btnBase +
   ' border border-token bg-white/70 hover:bg-white text-[var(--color-dark)]';
@@ -80,6 +94,31 @@ function firstErrorMessage(
   return scan(errs);
 }
 
+/** Find first invalid field path to focus */
+function firstErrorPath(
+  errs: FieldErrors<PortfolioFormValues>,
+  prefix: string[] = []
+): FieldPath<PortfolioFormValues> | null {
+  for (const [k, v] of Object.entries(errs)) {
+    if (!v) continue;
+    const path = [...prefix, k];
+    if (typeof v === 'object' && v && 'message' in v) {
+      return path.join('.') as FieldPath<PortfolioFormValues>;
+    }
+    if (Array.isArray(v)) {
+      for (let i = 0; i < v.length; i++) {
+        const inner = v[i] as FieldErrors<PortfolioFormValues>;
+        const found = firstErrorPath(inner, [...path, String(i)]);
+        if (found) return found;
+      }
+    } else if (typeof v === 'object' && v) {
+      const found = firstErrorPath(v as FieldErrors<PortfolioFormValues>, path);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 // Safe stringify for RHF errors (for debug blocks)
 function safeStringifyErrors(err: unknown) {
   const seen = new WeakSet<object>();
@@ -89,7 +128,6 @@ function safeStringifyErrors(err: unknown) {
       if (v == null || typeof v !== 'object') return v;
       const maybeObj = v as Record<string, unknown>;
 
-      // trim RHF objects
       if ('message' in maybeObj || 'type' in maybeObj || 'types' in maybeObj) {
         const out: Record<string, unknown> = {};
         if (typeof maybeObj.message === 'string')
@@ -108,8 +146,6 @@ function safeStringifyErrors(err: unknown) {
 }
 
 /* ========== Normalizers ========== */
-type SubImageForm = { key: string; url: string; sortOrder?: number };
-
 function mapSubImages(
   arr:
     | Array<{ key: string; url: string; sortOrder?: number | null }>
@@ -122,22 +158,13 @@ function mapSubImages(
   }));
 }
 
-function normTopVideos(
-  vs:
-    | Array<{
-        platform: (typeof VIDEO_PLATFORMS)[number];
-        url: string;
-        description?: string | null;
-      }>
-    | undefined
-) {
+function normTopVideos(vs: Array<VideoLinkForm> | undefined): VideoLinkForm[] {
   return (vs ?? []).map(v => ({
     ...v,
     description: v?.description ?? undefined
   }));
 }
 
-type ProjectForm = NonNullable<PortfolioFormValues['projects']>[number];
 function normProjects(ps: ProjectForm[] | undefined): ProjectForm[] {
   return (ps ?? []).map(p => ({
     ...p,
@@ -145,7 +172,9 @@ function normProjects(ps: ProjectForm[] | undefined): ProjectForm[] {
     subImages: mapSubImages(
       p?.subImages as unknown as SubImageForm[] | undefined
     ),
-    videoLinks: normTopVideos(p?.videoLinks as any)
+    videoLinks: normTopVideos(
+      p?.videoLinks as unknown as Array<VideoLinkForm> | undefined
+    )
   }));
 }
 
@@ -164,9 +193,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     formState: { errors, isSubmitting },
     reset,
     watch,
-    setValue
+    setValue,
+    setFocus
   } = useForm<PortfolioFormValues>({
-    // CHANGE: cast resolver so its output type matches PortfolioFormValues
     resolver: zodResolver(
       createPortfolioSchema
     ) as Resolver<PortfolioFormValues>,
@@ -174,19 +203,26 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
       slug: initial?.slug ?? '',
       publishStatus: initial?.publishStatus ?? 'DRAFT',
       title: initial?.title ?? '',
-      description: initial?.description ?? undefined, // null -> undefined
+      description: initial?.description ?? undefined,
       mainImageKey: initial?.mainImageKey ?? undefined,
       subImages: mapSubImages(
         initial?.subImages as
           | Array<{ key: string; url: string; sortOrder?: number | null }>
           | undefined
       ),
-      videoLinks: normTopVideos(initial?.videoLinks as any),
+      videoLinks: normTopVideos(
+        initial?.videoLinks as unknown as Array<VideoLinkForm> | undefined
+      ),
       tags: (initial?.tags ?? undefined) as string[] | undefined,
-      projects: normProjects(initial?.projects as any),
-      about: initial?.about as any,
-      experiences: (initial?.experiences as any) ?? [],
-      educations: (initial?.educations as any) ?? [],
+      projects: normProjects(
+        initial?.projects as unknown as ProjectForm[] | undefined
+      ),
+      about:
+        (initial?.about as AboutForm) ?? (undefined as unknown as AboutForm),
+      experiences:
+        (initial?.experiences as unknown as ExperienceForm[] | undefined) ?? [],
+      educations:
+        (initial?.educations as unknown as EducationForm[] | undefined) ?? [],
       prefillFromCardId: undefined
     }
   });
@@ -197,19 +233,27 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         slug: initial.slug ?? '',
         publishStatus: initial.publishStatus ?? 'DRAFT',
         title: initial.title ?? '',
-        description: initial.description ?? undefined, // null -> undefined
+        description: initial.description ?? undefined,
         mainImageKey: initial.mainImageKey ?? undefined,
         subImages: mapSubImages(
           initial.subImages as
             | Array<{ key: string; url: string; sortOrder?: number | null }>
             | undefined
         ),
-        videoLinks: normTopVideos(initial.videoLinks as any),
+        videoLinks: normTopVideos(
+          initial.videoLinks as unknown as Array<VideoLinkForm> | undefined
+        ),
         tags: (initial.tags ?? undefined) as string[] | undefined,
-        projects: normProjects(initial.projects as any),
-        about: initial.about as any,
-        experiences: (initial.experiences as any) ?? [],
-        educations: (initial.educations as any) ?? [],
+        projects: normProjects(
+          initial.projects as unknown as ProjectForm[] | undefined
+        ),
+        about:
+          (initial.about as AboutForm) ?? (undefined as unknown as AboutForm),
+        experiences:
+          (initial.experiences as unknown as ExperienceForm[] | undefined) ??
+          [],
+        educations:
+          (initial.educations as unknown as EducationForm[] | undefined) ?? [],
         prefillFromCardId: undefined
       });
     }
@@ -249,8 +293,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
   } = useFieldArray({ control, name: 'educations' });
 
   /* ===== New row factories ===== */
-  function newVideo() {
-    return { platform: 'TIKTOK' as const, url: '', description: '' };
+  function newVideo(): VideoLinkForm {
+    return { platform: 'TIKTOK', url: '', description: '' };
   }
   function newProject(): ProjectForm {
     return {
@@ -262,24 +306,24 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
       videoLinks: []
     };
   }
-  function newExp() {
+  function newExp(): ExperienceForm {
     return {
       company: '',
       role: '',
       location: '',
-      startDate: undefined as string | undefined,
-      endDate: undefined as string | undefined,
+      startDate: undefined,
+      endDate: undefined,
       current: false,
       summary: ''
     };
   }
-  function newEdu() {
+  function newEdu(): EducationForm {
     return {
       school: '',
       degree: '',
       field: '',
-      startDate: undefined as string | undefined,
-      endDate: undefined as string | undefined,
+      startDate: undefined,
+      endDate: undefined,
       summary: ''
     };
   }
@@ -398,6 +442,23 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     }
   }
 
+  /** onInvalid: flash + focus + scroll + safe log */
+  function onInvalid(errs: FieldErrors<PortfolioFormValues>) {
+    const msg = firstErrorMessage(errs) ?? 'Please fix the highlighted fields.';
+    show({ kind: 'error', title: 'Form error', message: msg });
+
+    const path = firstErrorPath(errs);
+    if (path) {
+      setFocus(path, { shouldSelect: true });
+      const el = document.querySelector(
+        `[name="${path}"]`
+      ) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    console.error('Form invalid:', safeStringifyErrors(errs));
+  }
+
   const setProjectMainImageKey = (idx: number, key: string) => {
     setValue(`projects.${idx}.mainImageKey`, key, {
       shouldDirty: true,
@@ -463,11 +524,25 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
     });
   }
 
+  /* ===== small helper for props (no TS red lines) ===== */
+  const withErrInput = (hasErr: boolean) => ({
+    className: hasErr ? inputErr : inputOk,
+    'aria-invalid': hasErr ? true : undefined
+  });
+  const withErrTextarea = (hasErr: boolean) => ({
+    className: hasErr ? textareaErr : textareaOk,
+    'aria-invalid': hasErr ? true : undefined
+  });
+  const withErrSelect = (hasErr: boolean) => ({
+    className: hasErr ? selectErr : selectOk,
+    'aria-invalid': hasErr ? true : undefined
+  });
+
   /* ===== Render ===== */
   return (
     <>
       {flash}
-      <form className='grid gap-6' onSubmit={handleSubmit(onSubmit)}>
+      <form className='grid gap-6' onSubmit={handleSubmit(onSubmit, onInvalid)}>
         {/* Hidden provenance field */}
         <input type='hidden' {...register('prefillFromCardId')} />
 
@@ -475,40 +550,44 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         <section className={sectionCardCls}>
           <h2 className='text-lg font-semibold mb-3'>Basics</h2>
 
-          {/* Slug + Publish + Prefill */}
-          <div className='grid md:grid-cols-3 gap-4'>
-            <div className='grid gap-2'>
-              <label className={labelCls}>Slug</label>
-              <input
-                className={inputCls}
-                placeholder='my-portfolio'
-                {...register('slug')}
-              />
-              <p className={sublabelCls}>
-                Lowercase, numbers, hyphens only.&nbsp;
-                {!!currentSlug && (
-                  <>
-                    Public:&nbsp;
-                    <a
-                      className='underline'
-                      href={`/portfolio/${encodeURIComponent(currentSlug)}`}
-                      target='_blank'
-                    >
-                      /portfolio/{currentSlug}
-                    </a>
-                  </>
-                )}
-              </p>
-              {errors.slug && (
-                <p className='text-sm text-red-600'>
-                  {String(errors.slug.message)}
-                </p>
+          {/* SLUG — stand-alone single row */}
+          <div className='grid gap-2 mb-4'>
+            <label className={labelCls}>Slug</label>
+            <input
+              placeholder='my-portfolio'
+              {...register('slug')}
+              {...withErrInput(!!errors.slug)}
+            />
+            <p className={sublabelCls}>
+              Lowercase, numbers, hyphens only.&nbsp;
+              {!!currentSlug && (
+                <>
+                  Public:&nbsp;
+                  <a
+                    className='underline'
+                    href={`/portfolio/${encodeURIComponent(currentSlug)}`}
+                    target='_blank'
+                  >
+                    /portfolio/{currentSlug}
+                  </a>
+                </>
               )}
-            </div>
+            </p>
+            {errors.slug && (
+              <p className='text-sm text-red-600'>
+                {String(errors.slug.message)}
+              </p>
+            )}
+          </div>
 
+          {/* Publish + Prefill in a separate grid */}
+          <div className='grid md:grid-cols-2 gap-4'>
             <div className='grid gap-2'>
               <label className={labelCls}>Publish status</label>
-              <select className={selectCls} {...register('publishStatus')}>
+              <select
+                {...register('publishStatus')}
+                {...withErrSelect(!!errors.publishStatus)}
+              >
                 <option value='DRAFT'>Draft</option>
                 <option value='PRIVATE'>Private</option>
                 <option value='PUBLISHED'>Published</option>
@@ -524,7 +603,7 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
               <label className={labelCls}>Prefill from card</label>
               <div className='flex gap-2'>
                 <select
-                  className={selectCls}
+                  className={selectOk}
                   value={prefillCardId}
                   onChange={e => setPrefillCardId(e.target.value)}
                 >
@@ -551,9 +630,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
           <div className='grid gap-2 mt-4'>
             <label className={labelCls}>Title</label>
             <input
-              className={inputCls}
               placeholder='Portfolio title'
               {...register('title')}
+              {...withErrInput(!!errors.title)}
             />
             {errors.title && (
               <p className='text-sm text-red-600'>
@@ -565,10 +644,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
           <div className='grid gap-2 mt-4'>
             <label className={labelCls}>Description</label>
             <textarea
-              className={textareaCls}
               rows={4}
               placeholder='Short overview'
               {...register('description')}
+              {...withErrTextarea(!!errors.description)}
             />
             {errors.description && (
               <p className='text-sm text-red-600'>
@@ -641,7 +720,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
           <div className='grid md:grid-cols-2 gap-3 mt-4'>
             <div className='grid gap-1'>
               <label className={labelCls}>First name</label>
-              <input className={inputCls} {...register('about.firstName')} />
+              <input
+                {...register('about.firstName')}
+                {...withErrInput(!!errors.about?.firstName)}
+              />
               {errors.about?.firstName && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.firstName.message)}
@@ -650,7 +732,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             </div>
             <div className='grid gap-1'>
               <label className={labelCls}>Last name</label>
-              <input className={inputCls} {...register('about.lastName')} />
+              <input
+                {...register('about.lastName')}
+                {...withErrInput(!!errors.about?.lastName)}
+              />
               {errors.about?.lastName && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.lastName.message)}
@@ -659,7 +744,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             </div>
             <div className='grid gap-1'>
               <label className={labelCls}>Role</label>
-              <input className={inputCls} {...register('about.role')} />
+              <input
+                {...register('about.role')}
+                {...withErrInput(!!errors.about?.role)}
+              />
               {errors.about?.role && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.role.message)}
@@ -668,7 +756,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             </div>
             <div className='grid gap-1'>
               <label className={labelCls}>Country</label>
-              <input className={inputCls} {...register('about.country')} />
+              <input
+                {...register('about.country')}
+                {...withErrInput(!!errors.about?.country)}
+              />
               {errors.about?.country && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.country.message)}
@@ -679,8 +770,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
               <label className={labelCls}>Short bio</label>
               <textarea
                 rows={3}
-                className={textareaCls}
                 {...register('about.shortBio')}
+                {...withErrTextarea(!!errors.about?.shortBio)}
               />
               {errors.about?.shortBio && (
                 <p className='text-sm text-red-600'>
@@ -690,7 +781,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             </div>
             <div className='grid gap-1'>
               <label className={labelCls}>Company</label>
-              <input className={inputCls} {...register('about.company')} />
+              <input
+                {...register('about.company')}
+                {...withErrInput(!!errors.about?.company)}
+              />
               {errors.about?.company && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.company.message)}
@@ -699,7 +793,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
             </div>
             <div className='grid gap-1'>
               <label className={labelCls}>University</label>
-              <input className={inputCls} {...register('about.university')} />
+              <input
+                {...register('about.university')}
+                {...withErrInput(!!errors.about?.university)}
+              />
               {errors.about?.university && (
                 <p className='text-sm text-red-600'>
                   {String(errors.about.university.message)}
@@ -876,8 +973,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className='text-xs font-medium'>Platform</label>
                     <select
-                      className={selectCls}
                       {...register(`videoLinks.${idx}.platform` as const)}
+                      {...withErrSelect(!!errors.videoLinks?.[idx]?.platform)}
                     >
                       {VIDEO_PLATFORMS.map(p => (
                         <option key={p} value={p}>
@@ -894,9 +991,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='md:col-span-2 grid gap-1'>
                     <label className='text-xs font-medium'>URL</label>
                     <input
-                      className={inputCls}
                       placeholder='https://...'
                       {...register(`videoLinks.${idx}.url` as const)}
+                      {...withErrInput(!!errors.videoLinks?.[idx]?.url)}
                     />
                     {errors.videoLinks?.[idx]?.url && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -907,9 +1004,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='md:col-span-2 grid gap-1'>
                     <label className='text-xs font-medium'>Caption</label>
                     <input
-                      className={inputCls}
                       placeholder='Short description'
                       {...register(`videoLinks.${idx}.description` as const)}
+                      {...withErrInput(!!errors.videoLinks?.[idx]?.description)}
                     />
                     {errors.videoLinks?.[idx]?.description && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -933,7 +1030,10 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
         {/* Tags */}
         <section className={sectionCardCls}>
           <h2 className='text-lg font-semibold mb-3'>Tags</h2>
-          <TagsInput name='tags' register={register} />
+          <TagsInput
+            name={'tags' as FieldPath<PortfolioFormValues>}
+            register={register}
+          />
           {errors.tags && (
             <p className='text-sm text-red-600 mt-1'>
               {String(errors.tags.message)}
@@ -979,8 +1079,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>Company</label>
                     <input
-                      className={inputCls}
                       {...register(`experiences.${i}.company` as const)}
+                      {...withErrInput(!!errors.experiences?.[i]?.company)}
                     />
                     {errors.experiences?.[i]?.company && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -991,8 +1091,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>Role</label>
                     <input
-                      className={inputCls}
                       {...register(`experiences.${i}.role` as const)}
+                      {...withErrInput(!!errors.experiences?.[i]?.role)}
                     />
                     {errors.experiences?.[i]?.role && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1003,8 +1103,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>Location</label>
                     <input
-                      className={inputCls}
                       {...register(`experiences.${i}.location` as const)}
+                      {...withErrInput(!!errors.experiences?.[i]?.location)}
                     />
                     {errors.experiences?.[i]?.location && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1017,8 +1117,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                       <label className={labelCls}>Start</label>
                       <input
                         type='date'
-                        className={inputCls}
                         {...register(`experiences.${i}.startDate` as const)}
+                        {...withErrInput(!!errors.experiences?.[i]?.startDate)}
                       />
                       {errors.experiences?.[i]?.startDate && (
                         <p className='text-xs text-red-600 mt-1'>
@@ -1030,8 +1130,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                       <label className={labelCls}>End</label>
                       <input
                         type='date'
-                        className={inputCls}
                         {...register(`experiences.${i}.endDate` as const)}
+                        {...withErrInput(!!errors.experiences?.[i]?.endDate)}
                       />
                       {errors.experiences?.[i]?.endDate && (
                         <p className='text-xs text-red-600 mt-1'>
@@ -1051,8 +1151,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                     <label className={labelCls}>Summary</label>
                     <textarea
                       rows={3}
-                      className={textareaCls}
                       {...register(`experiences.${i}.summary` as const)}
+                      {...withErrTextarea(!!errors.experiences?.[i]?.summary)}
                     />
                     {errors.experiences?.[i]?.summary && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1104,8 +1204,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>School</label>
                     <input
-                      className={inputCls}
                       {...register(`educations.${i}.school` as const)}
+                      {...withErrInput(!!errors.educations?.[i]?.school)}
                     />
                     {errors.educations?.[i]?.school && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1116,8 +1216,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>Degree</label>
                     <input
-                      className={inputCls}
                       {...register(`educations.${i}.degree` as const)}
+                      {...withErrInput(!!errors.educations?.[i]?.degree)}
                     />
                     {errors.educations?.[i]?.degree && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1128,8 +1228,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='grid gap-1'>
                     <label className={labelCls}>Field of study</label>
                     <input
-                      className={inputCls}
                       {...register(`educations.${i}.field` as const)}
+                      {...withErrInput(!!errors.educations?.[i]?.field)}
                     />
                     {errors.educations?.[i]?.field && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1142,8 +1242,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                       <label className={labelCls}>Start</label>
                       <input
                         type='date'
-                        className={inputCls}
                         {...register(`educations.${i}.startDate` as const)}
+                        {...withErrInput(!!errors.educations?.[i]?.startDate)}
                       />
                       {errors.educations?.[i]?.startDate && (
                         <p className='text-xs text-red-600 mt-1'>
@@ -1155,8 +1255,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                       <label className={labelCls}>End</label>
                       <input
                         type='date'
-                        className={inputCls}
                         {...register(`educations.${i}.endDate` as const)}
+                        {...withErrInput(!!errors.educations?.[i]?.endDate)}
                       />
                       {errors.educations?.[i]?.endDate && (
                         <p className='text-xs text-red-600 mt-1'>
@@ -1169,8 +1269,8 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                     <label className={labelCls}>Summary</label>
                     <textarea
                       rows={3}
-                      className={textareaCls}
                       {...register(`educations.${i}.summary` as const)}
+                      {...withErrTextarea(!!errors.educations?.[i]?.summary)}
                     />
                     {errors.educations?.[i]?.summary && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1246,9 +1346,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                     <div className='grid gap-1'>
                       <label className={labelCls}>Title</label>
                       <input
-                        className={inputCls}
                         placeholder='Project title'
                         {...register(`projects.${pIdx}.title` as const)}
+                        {...withErrInput(!!errors.projects?.[pIdx]?.title)}
                       />
                       {errors.projects?.[pIdx]?.title && (
                         <p className='text-xs text-red-600 mt-1'>
@@ -1288,10 +1388,12 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='mt-3 grid gap-1'>
                     <label className={labelCls}>Description</label>
                     <textarea
-                      className={textareaCls}
                       rows={3}
                       placeholder='What did you build? What was your role?'
                       {...register(`projects.${pIdx}.description` as const)}
+                      {...withErrTextarea(
+                        !!errors.projects?.[pIdx]?.description
+                      )}
                     />
                     {errors.projects?.[pIdx]?.description && (
                       <p className='text-xs text-red-600 mt-1'>
@@ -1303,7 +1405,9 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   <div className='mt-3 grid gap-1'>
                     <label className={labelCls}>Project Tags</label>
                     <TagsInput
-                      name={`projects.${pIdx}.tags`}
+                      name={
+                        `projects.${pIdx}.tags` as FieldPath<PortfolioFormValues>
+                      }
                       register={register}
                     />
                     {errors.projects?.[pIdx]?.tags && (
@@ -1361,16 +1465,15 @@ function TagsInput({
   name,
   register
 }: {
-  name: string;
+  name: FieldPath<PortfolioFormValues>;
   register: UseFormRegister<PortfolioFormValues>;
 }) {
   return (
     <input
-      className={inputCls}
+      className={inputOk}
       placeholder='e.g. UGC, Beverage, Ramadan'
-      {...register(name as any, {
-        setValueAs: (v: unknown) => {
-          // Allow users to type a comma-separated string; turn into string[]
+      {...register(name, {
+        setValueAs: (v: unknown): string[] | undefined => {
           if (Array.isArray(v)) return v as string[];
           if (typeof v === 'string') {
             return v
@@ -1552,8 +1655,8 @@ function ProjectVideos({ pIdx, register, control }: ProjectVideosProps) {
               <div className='grid gap-1'>
                 <label className='text-xs font-medium'>Platform</label>
                 <select
-                  className={selectCls}
                   {...register(`${nameBase}.${idx}.platform` as const)}
+                  className={selectOk}
                 >
                   {VIDEO_PLATFORMS.map(p => (
                     <option key={p} value={p}>
@@ -1565,17 +1668,17 @@ function ProjectVideos({ pIdx, register, control }: ProjectVideosProps) {
               <div className='md:col-span-2 grid gap-1'>
                 <label className='text-xs font-medium'>URL</label>
                 <input
-                  className={inputCls}
                   placeholder='https://...'
                   {...register(`${nameBase}.${idx}.url` as const)}
+                  className={inputOk}
                 />
               </div>
               <div className='md:col-span-2 grid gap-1'>
                 <label className='text-xs font-medium'>Caption</label>
                 <input
-                  className={inputCls}
                   placeholder='Short description'
                   {...register(`${nameBase}.${idx}.description` as const)}
+                  className={inputOk}
                 />
               </div>
             </div>

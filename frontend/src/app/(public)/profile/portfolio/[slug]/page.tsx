@@ -22,7 +22,6 @@ type SubImage = NonNullable<Portfolio['subImages']>[number];
 type Project = NonNullable<Portfolio['projects']>[number];
 type Experience = NonNullable<Portfolio['experiences']>[number];
 type Education = NonNullable<Portfolio['educations']>[number];
-
 type TopVideo = NonNullable<Portfolio['videoLinks']>[number];
 
 /* ---------------- helpers ---------------- */
@@ -70,7 +69,7 @@ const getAvatar = (p: Portfolio, about = getAbout(p)) =>
   urlFor(about.avatarKey ?? null) ?? about.avatarUrl ?? null;
 
 const getBanner = (p: Portfolio, about = getAbout(p)) =>
-  urlFor(about.bannerKey ?? null) ?? about.bannerUrl ?? urlFor(p.mainImageKey); // ✅ removed `?? null ??`
+  urlFor(about.bannerKey ?? null) ?? about.bannerUrl ?? urlFor(p.mainImageKey);
 
 /** Try common locations your API might place a public digital card slug */
 type WithCardSlug = {
@@ -157,65 +156,67 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
     return (
       <main className='min-h-[80vh] text-foreground'>
         {/* ================= HERO ================= */}
-        <section className='relative'>
+        <section className='relative z-0'>
           {/* gradient base */}
           <div
             className='
+              relative
               h-56 sm:h-64 w-full
               bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)]
               bg-[length:220%_220%] animate-[border-pan_14s_ease-in-out_infinite]
               opacity-90
             '
-          />
-          {banner && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={banner}
-              alt='banner'
-              className='absolute inset-0 h-56 sm:h-64 w-full object-cover mix-blend-overlay opacity-60'
-            />
-          )}
+          >
+            {banner && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={banner}
+                alt='banner'
+                className='absolute inset-0 h-full w-full object-cover mix-blend-overlay opacity-60'
+              />
+            )}
+          </div>
+        </section>
 
-          {/* avatar + name */}
-          <div className='absolute inset-x-0 -bottom-12'>
-            <div className='max-w-6xl mx-auto px-4 sm:px-6 flex items-end gap-4'>
-              {/* avatar (no black: gradient ring + light inner plate) */}
-              <div className='shrink-0'>
-                <div className='p-[3px] rounded-full bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)] shadow'>
-                  <div className='h-24 w-24 sm:h-28 sm:w-28 rounded-full overflow-hidden bg-white'>
-                    {avatar ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={avatar}
-                        alt='avatar'
-                        className='h-full w-full object-cover'
-                      />
-                    ) : (
-                      <div className='h-full w-full grid place-items-center text-xs text-neutral-400'>
-                        No avatar
-                      </div>
-                    )}
-                  </div>
+        {/* ===== Header: avatar + name (brought to front) ===== */}
+        <section className='relative z-10 -mt-12 sm:-mt-14'>
+          <div className='max-w-6xl mx-auto px-4 sm:px-6 flex items-end gap-4'>
+            {/* avatar: high z-index + crisp white ring so it clearly sits above hero */}
+            <div className='relative z-20 shrink-0'>
+              <div className='p-[3px] rounded-full bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)] shadow-lg ring-8 ring-white'>
+                <div className='h-24 w-24 sm:h-28 sm:w-28 rounded-full overflow-hidden bg-white'>
+                  {avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={avatar}
+                      alt='avatar'
+                      className='h-full w-full object-cover'
+                    />
+                  ) : (
+                    <div className='h-full w-full grid place-items-center text-xs text-neutral-400'>
+                      No avatar
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* name + role */}
-              <div className='pb-2'>
-                <h1 className='text-2xl sm:text-3xl font-extrabold tracking-wide'>
-                  {fullName}
-                </h1>
-                {about.role && (
-                  <p className='mt-0.5 text-[15px] font-medium text-neutral-700'>
-                    {about.role}
-                  </p>
-                )}
-              </div>
+            {/* name + role */}
+            <div className='relative z-10 pb-1 sm:pb-2'>
+              <h1 className='text-2xl sm:text-3xl font-extrabold tracking-wide leading-tight'>
+                {fullName}
+              </h1>
+              {about.role && (
+                <p className='mt-0.5 text-[15px] font-medium text-neutral-700'>
+                  {about.role}
+                </p>
+              )}
             </div>
           </div>
         </section>
 
         {/* ================= BODY ================= */}
-        <section className='pt-16 pb-20'>
+        <section className='pt-8 pb-20'>
           <div className='max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-12 gap-8'>
             {/* ---------- Sidebar (sticky) ---------- */}
             <aside className='col-span-12 lg:col-span-4'>
@@ -353,6 +354,39 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                 </section>
               )}
 
+              {/* ===== Education timeline (dot at top) ===== */}
+              {edus.length > 0 && (
+                <section>
+                  <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>
+                    Education
+                  </h2>
+                  <ol className='relative border-l-2 border-neutral-200 pl-4 space-y-6'>
+                    {edus.map(ed => (
+                      <li key={ed.id} className='ml-2'>
+                        <div className='absolute -left-[9px] mt-1 h-4 w-4 rounded-full bg-gradient-to-r from-[#7b39e8] to-[#2d69ea]' />
+                        <div className='text-[15px]'>
+                          <div className='font-semibold'>{ed.school}</div>
+                          <div className='text-neutral-700'>
+                            {[ed.degree, ed.field].filter(Boolean).join(' • ')}
+                            {(ed.startDate || ed.endDate) && (
+                              <>
+                                {' '}
+                                · {dateRange(ed.startDate, ed.endDate, false)}
+                              </>
+                            )}
+                          </div>
+                          {ed.summary && (
+                            <p className='mt-1 whitespace-pre-wrap text-neutral-800'>
+                              {ed.summary}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+
               {/* ===== Top-level Video Links ===== */}
               {topVideos.length > 0 && (
                 <section>
@@ -390,8 +424,6 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                   <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>
                     Projects
                   </h2>
-
-                  {/* Responsive grid */}
                   <div className='grid sm:grid-cols-2 gap-6'>
                     {projects.map((proj, i) => {
                       const pSub: Project['subImages'] = proj.subImages ?? [];
@@ -509,33 +541,6 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                       </div>
                     ))}
                   </div>
-                </section>
-              )}
-
-              {/* Education */}
-              {edus.length > 0 && (
-                <section>
-                  <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>
-                    Education
-                  </h2>
-                  <ul className='space-y-4'>
-                    {edus.map(ed => (
-                      <li key={ed.id} className='text-[15px]'>
-                        <div className='font-semibold'>{ed.school}</div>
-                        <div className='text-neutral-700'>
-                          {[ed.degree, ed.field].filter(Boolean).join(' • ')}
-                          {(ed.startDate || ed.endDate) && (
-                            <> · {dateRange(ed.startDate, ed.endDate, false)}</>
-                          )}
-                        </div>
-                        {ed.summary && (
-                          <p className='mt-1 whitespace-pre-wrap text-neutral-800'>
-                            {ed.summary}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
                 </section>
               )}
             </div>
