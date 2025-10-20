@@ -1,7 +1,7 @@
 // src/app/(onboarding)/username/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -52,7 +52,17 @@ function normalizeUsername(input: string) {
 // Some fun, safe suggestions
 const SUGGESTIONS = ['creator', 'maker', 'dev', 'artist', 'writer', 'designer'];
 
+/** Page component — provides the Suspense boundary required by Next.js */
 export default function UsernameOnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <UsernameOnboardingInner />
+    </Suspense>
+  );
+}
+
+/** Inner component — contains your original logic and uses useSearchParams() */
+function UsernameOnboardingInner() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/';
