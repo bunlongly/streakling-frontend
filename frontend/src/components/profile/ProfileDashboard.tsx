@@ -73,7 +73,7 @@ export default function ProfileDashboard({ profile }: Props) {
   const industries = (profile.industries || []).map(i => i.name || i.slug);
 
   // Public / secondary pages (adjust if your routes differ)
-  const publicProfileUrl = profile.username ? `/u/${profile.username}` : '/';
+  const publicProfileUrl = profile.username ? `/profile/${profile.username}` : '/';
   const portfolioUrl = '/profile/portfolios';
   const namecardUrl = '/profile/cards';
 

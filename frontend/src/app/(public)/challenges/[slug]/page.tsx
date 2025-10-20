@@ -1,4 +1,3 @@
-// src/app/challenges/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import { api, HttpError } from '@/lib/api';
 import SubmissionSection from '@/components/challenges/SubmissionSection';
@@ -18,7 +17,7 @@ function toPublicUrl(keyOrUrl?: string | null) {
 }
 
 function formatCents(cents?: number | null) {
-  if (typeof cents !== 'number' || isNaN(cents)) return null;
+  if (typeof cents !== 'number' || Number.isNaN(cents)) return null;
   return `$${(cents / 100).toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
@@ -26,8 +25,8 @@ function formatCents(cents?: number | null) {
 }
 
 function rankSuffix(n: number) {
-  const j = n % 10,
-    k = n % 100;
+  const j = n % 10;
+  const k = n % 100;
   if (j === 1 && k !== 11) return `${n}st`;
   if (j === 2 && k !== 12) return `${n}nd`;
   if (j === 3 && k !== 13) return `${n}rd`;
@@ -120,7 +119,7 @@ export default async function ChallengeDetailPage({ params }: Props) {
         {images.length ? (
           <section>
             <div className='grid grid-cols-2 md:grid-cols-3 gap-3'>
-              {images.map(img => (
+              {images.map((img: { id: string; url: string }) => (
                 <MagicBorder
                   key={img.id}
                   radius='rounded-2xl'
@@ -161,26 +160,33 @@ export default async function ChallengeDetailPage({ params }: Props) {
           <section className='space-y-3'>
             <h2 className='text-lg font-semibold'>Prizes</h2>
             <ul className='space-y-3'>
-              {prizes.map(p => {
-                const amount = formatCents(p.amountCents);
-                return (
-                  <li key={p.id}>
-                    <MagicBorder radius='rounded-2xl' className='shadow-none'>
-                      <div className='rounded-2xl bg-white p-3 text-sm flex items-center justify-between'>
-                        <div className='font-semibold'>
-                          {rankSuffix(p.rank)}
+              {prizes.map(
+                (p: {
+                  id: string;
+                  rank: number;
+                  label?: string | null;
+                  amountCents?: number | null;
+                }) => {
+                  const amount = formatCents(p.amountCents ?? null);
+                  return (
+                    <li key={p.id}>
+                      <MagicBorder radius='rounded-2xl' className='shadow-none'>
+                        <div className='rounded-2xl bg-white p-3 text-sm flex items-center justify-between'>
+                          <div className='font-semibold'>
+                            {rankSuffix(p.rank)}
+                          </div>
+                          <div className='flex-1 px-3 text-neutral-700'>
+                            {p.label ?? '—'}
+                          </div>
+                          <div className='text-neutral-900 font-semibold'>
+                            {amount ?? '—'}
+                          </div>
                         </div>
-                        <div className='flex-1 px-3 text-neutral-700'>
-                          {p.label ?? '—'}
-                        </div>
-                        <div className='text-neutral-900 font-semibold'>
-                          {amount ?? '—'}
-                        </div>
-                      </div>
-                    </MagicBorder>
-                  </li>
-                );
-              })}
+                      </MagicBorder>
+                    </li>
+                  );
+                }
+              )}
             </ul>
           </section>
         ) : null}

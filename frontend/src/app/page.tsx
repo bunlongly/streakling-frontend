@@ -3,6 +3,8 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import LazyVideo from '@/components/LazyVideo';
 import PricingPlans from '@/components/PricingPlans';
 import FAQ from '@/components/FAQ';
@@ -94,7 +96,7 @@ function TypeLoop({
   const shown = reduced ? curr : curr.slice(0, len);
 
   return (
-    <span className='relative whitespace-nowrap'>
+    <span className='relative'>
       {shown}
       {!reduced && phase !== 'idle' && (
         <span
@@ -108,8 +110,30 @@ function TypeLoop({
   );
 }
 
+/** ------------ Framer Motion Variants (typed) ------------ */
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const container: Variants = {
+  hidden: { opacity: 0 },
+  show: (delay = 0) => ({
+    opacity: 1,
+    transition: { delay, when: 'beforeChildren', staggerChildren: 0.12 }
+  })
+};
+
+const item: Variants = {
+  hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: 0.42, ease: EASE_OUT }
+  }
+};
+
 export default function HomePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   /** 🔒 Ensure initial scroll is at top on a fresh load (no hash) */
   useEffect(() => {
@@ -181,14 +205,19 @@ export default function HomePage() {
         <div className='pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent' />
 
         <div className='relative z-10 flex h-full w-full items-center justify-center px-4'>
-          <div className='w-full text-center'>
-            {/* Centering: wrap h1 in an inline-block so the line + caret are perfectly centered */}
+          <motion.div
+            className='w-full text-center'
+            initial='hidden'
+            animate='show'
+            variants={container}
+          >
+            {/* Centering: allow wrapping (no nowrap) and balance line breaks to avoid ugly wraps */}
             <div className='flex justify-center'>
               <h1
                 className={[
                   'inline-flex items-baseline font-sans font-extrabold tracking-tight text-white drop-shadow',
                   'text-[clamp(28px,6vw,64px)]',
-                  'whitespace-nowrap'
+                  'text-balance'
                 ].join(' ')}
                 aria-label='Your creator identity, all in one link.'
               >
@@ -204,28 +233,37 @@ export default function HomePage() {
               </h1>
             </div>
 
-            <div className='mt-8 flex flex-wrap items-center justify-center gap-3'>
-              <Link
-                href='/profile/cards/create'
-                className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium text-white bg-[color:var(--color-primary)] hover:opacity-90 transition'
-              >
-                Create Digital Card
-              </Link>
-              <Link
-                href='/profile/portfolio'
-                className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium border border-white/60 text-white/95 hover:bg-white/10 transition'
-              >
-                Explore Portfolios
-              </Link>
-              <Link
-                href='/challenges'
-                className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium border border-white/60 text-white/95 hover:bg-white/10 transition'
-              >
-                Join Challenges
-              </Link>
-            </div>
+            <motion.div
+              className='mt-8 flex flex-wrap items-center justify-center gap-3'
+              variants={container}
+            >
+              <motion.div variants={item}>
+                <Link
+                  href='/profile/cards/create'
+                  className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium text-white bg-[color:var(--color-primary)] hover:opacity-90 transition'
+                >
+                  Create Digital Card
+                </Link>
+              </motion.div>
+              <motion.div variants={item}>
+                <Link
+                  href='/profile/portfolio'
+                  className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium border border-white/60 text-white/95 hover:bg-white/10 transition'
+                >
+                  Explore Portfolios
+                </Link>
+              </motion.div>
+              <motion.div variants={item}>
+                <Link
+                  href='/challenges'
+                  className='inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium border border-white/60 text-white/95 hover:bg-white/10 transition'
+                >
+                  Join Challenges
+                </Link>
+              </motion.div>
+            </motion.div>
 
-            <div className='mt-10 flex justify-center'>
+            <motion.div className='mt-10 flex justify-center' variants={item}>
               <a
                 href='#discover'
                 className='group inline-flex items-center gap-2 text-white/80 hover:text-white transition'
@@ -251,77 +289,104 @@ export default function HomePage() {
                   <path d='M6 9l6 6 6-6' />
                 </svg>
               </a>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
-      {/* ===== Overview video (NEW) ===== */}
-      <OverviewShowcase />
+      {/* ===== Overview video (unchanged) ===== */}
+      <motion.div
+        initial='hidden'
+        whileInView='show'
+        viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.2 }}
+        variants={container}
+      >
+        <OverviewShowcase />
+      </motion.div>
 
       {/* ===== Below-hero content ===== */}
       <section
         id='discover'
         className='mx-auto max-w-6xl px-4 py-12 sm:py-16 md:py-20 scroll-mt-24'
       >
-        <div className='grid gap-8 md:grid-cols-3'>
-          <Card
-            title='Digital Card'
-            desc='Share a scannable profile that unifies your socials, contact, and industry info—perfect for collabs and events.'
-            href='/profile/cards/create'
-            cta='Build your card'
-          />
-          <Card
-            title='Portfolio'
-            desc='Show your best work with images and video, organized by projects. Link it from your card and socials.'
-            href='/profile/portfolio'
-            cta='Browse portfolios'
-          />
-          <Card
-            title='Trending Challenges'
-            desc='Join time-boxed video challenges to grow faster. Submit, get featured, and connect with other creators.'
-            href='/challenges'
-            cta='See challenges'
-          />
-        </div>
+        <motion.div
+          className='grid gap-8 md:grid-cols-3'
+          initial='hidden'
+          whileInView='show'
+          viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.2 }}
+          variants={container}
+        >
+          <motion.div variants={item}>
+            <Card
+              title='Digital Card'
+              desc='Share a scannable profile that unifies your socials, contact, and industry info—perfect for collabs and events.'
+              href='/profile/cards/create'
+              cta='Build your card'
+            />
+          </motion.div>
+          <motion.div variants={item}>
+            <Card
+              title='Portfolio'
+              desc='Show your best work with images and video, organized by projects. Link it from your card and socials.'
+              href='/profile/portfolio'
+              cta='Browse portfolios'
+            />
+          </motion.div>
+          <motion.div variants={item}>
+            <Card
+              title='Trending Challenges'
+              desc='Join time-boxed video challenges to grow faster. Submit, get featured, and connect with other creators.'
+              href='/challenges'
+              cta='See challenges'
+            />
+          </motion.div>
+        </motion.div>
 
         {/* ===== Feature row #1 ===== */}
-        <div className='mt-16 grid items-center gap-8 md:gap-12 md:grid-cols-2'>
-          <BrowserMock title='streakling.com/search?industry=Fashion'>
-            <LazyVideo
-              className='h-full w-full object-cover'
-              autoPlay
-              muted
-              loop
-              playsInline
-              poster='/hero-poster.jpg'
-              src='/content-creators.mp4'
-              preload='none'
-              rootMargin='400px'
-            />
-            <div className='pointer-events-none absolute left-4 right-4 top-4'>
-              <div className='mx-auto max-w-md rounded-full bg-white/90 px-4 py-2 shadow'>
-                <div className='flex items-center gap-2 text-[13px] text-black/70'>
-                  <svg
-                    viewBox='0 0 24 24'
-                    className='h-4 w-4'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth={2}
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    aria-hidden
-                  >
-                    <circle cx='11' cy='11' r='8' />
-                    <path d='m21 21-4.3-4.3' />
-                  </svg>
-                  <span>Search creators by industry…</span>
+        <motion.div
+          className='mt-16 grid items-center gap-8 md:gap-12 md:grid-cols-2'
+          initial='hidden'
+          whileInView='show'
+          viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.25 }}
+          variants={container}
+        >
+          <motion.div variants={item}>
+            <BrowserMock title='streakling.com/search?industry=Fashion'>
+              <LazyVideo
+                className='h-full w-full object-cover'
+                autoPlay
+                muted
+                loop
+                playsInline
+                poster='/hero-poster.jpg'
+                src='/content-creators.mp4'
+                preload='none'
+                rootMargin='400px'
+              />
+              <div className='pointer-events-none absolute left-4 right-4 top-4'>
+                <div className='mx-auto max-w-md rounded-full bg-white/90 px-4 py-2 shadow'>
+                  <div className='flex items-center gap-2 text-[13px] text-black/70'>
+                    <svg
+                      viewBox='0 0 24 24'
+                      className='h-4 w-4'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth={2}
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      aria-hidden
+                    >
+                      <circle cx='11' cy='11' r='8' />
+                      <path d='m21 21-4.3-4.3' />
+                    </svg>
+                    <span>Search creators by industry…</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </BrowserMock>
+            </BrowserMock>
+          </motion.div>
 
-          <div>
+          <motion.div variants={item}>
             <h2 className='text-2xl sm:text-3xl font-semibold'>
               Find creators by industry in seconds
             </h2>
@@ -335,7 +400,7 @@ export default function HomePage() {
             <ul className='mt-5 space-y-2 text-[15px]'>
               <li>• Smart search with industry tags</li>
               <li>• One-scan profile sharing via QR</li>
-              <li>• Portfolio previews (images & video)</li>
+              <li>• Portfolio previews (images &amp; video)</li>
               <li>• Instant contact and social links</li>
             </ul>
 
@@ -353,12 +418,19 @@ export default function HomePage() {
                 Create your card
               </Link>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        {/* ===== Feature row #2 ===== */}
-        <div className='mt-16 grid items-center gap-8 md:gap-12 md:grid-cols-2'>
-          <div className='md:order-1 order-2'>
+        {/* ===== Feature row #2 (YOUR ORIGINAL ORDER) ===== */}
+        <motion.div
+          className='mt-16 grid items-center gap-8 md:gap-12 md:grid-cols-2'
+          initial='hidden'
+          whileInView='show'
+          viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.25 }}
+          variants={container}
+        >
+          {/* TEXT LEFT */}
+          <motion.div className='md:order-1 order-2' variants={item}>
             <h2 className='text-2xl sm:text-3xl font-semibold'>
               Join trending challenges and submit your entry
             </h2>
@@ -369,7 +441,7 @@ export default function HomePage() {
             </p>
 
             <ul className='mt-5 space-y-2 text-[15px]'>
-              <li>• Weekly & monthly trending topics</li>
+              <li>• Weekly &amp; monthly trending topics</li>
               <li>• Submit via video link, document, or image</li>
               <li>• Auto-tagged by industry for discovery</li>
               <li>• Showcase results on your Digital Card</li>
@@ -389,9 +461,10 @@ export default function HomePage() {
                 Submit your entry
               </Link>
             </div>
-          </div>
+          </motion.div>
 
-          <div className='md:order-2 order-1'>
+          {/* VIDEO RIGHT */}
+          <motion.div className='md:order-2 order-1' variants={item}>
             <BrowserMock title='streakling.com/challenges/trending'>
               <LazyVideo
                 className='h-full w-full object-cover'
@@ -426,15 +499,29 @@ export default function HomePage() {
                 </div>
               </div>
             </BrowserMock>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* ===== Pricing (split component) ===== */}
-      <PricingPlans />
+      <motion.div
+        initial='hidden'
+        whileInView='show'
+        viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.15 }}
+        variants={container}
+      >
+        <PricingPlans />
+      </motion.div>
 
       {/* ===== FAQ (split component) ===== */}
-      <FAQ />
+      <motion.div
+        initial='hidden'
+        whileInView='show'
+        viewport={{ once: true, amount: prefersReducedMotion ? 0 : 0.15 }}
+        variants={container}
+      >
+        <FAQ />
+      </motion.div>
 
       {/* caret + styling (scoped) */}
       <style jsx>{`

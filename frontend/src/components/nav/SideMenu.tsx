@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import { SignedIn, SignedOut, useAuth } from '@clerk/nextjs';
 import type { NavItem } from './NavConfig';
@@ -18,23 +19,24 @@ import AddBoxRoundedIcon from '@mui/icons-material/AddBoxRounded';
 import MilitaryTechRoundedIcon from '@mui/icons-material/MilitaryTechRounded';
 import AddTaskRoundedIcon from '@mui/icons-material/AddTaskRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
-
-/* Admin icons */
 import AdminPanelSettingsRoundedIcon from '@mui/icons-material/AdminPanelSettingsRounded';
 
 import MagicBorder from '@/components/ui/MagicBorder';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
-import { api } from '@/lib/api';
+import { api, type ApiSuccess } from '@/lib/api';
 
 type Props = {
   open: boolean;
-  onClose: () => void;
+  /** rename to satisfy Next.js client Action prop rule */
+  onCloseAction: () => void;
+
   publicPrimary: NavItem[];
   authedPrimary: NavItem[];
   authedSecondary: NavItem[];
 };
 
-/* Tiny inline hook to get me (role-aware) */
+/* Tiny inline hook to get me (role-aware), typed (no `any`) */
+type Me = { role?: 'ADMIN' | 'USER' };
 function useMe(enabled: boolean) {
   const [role, setRole] = React.useState<'ADMIN' | 'USER' | undefined>();
   React.useEffect(() => {
@@ -43,8 +45,8 @@ function useMe(enabled: boolean) {
     (async () => {
       try {
         const res = await api.profile.get();
-        const d = (res as any).data || (res as any);
-        if (!stop) setRole(d?.role as 'ADMIN' | 'USER' | undefined);
+        const d = (res as ApiSuccess<Me>).data;
+        if (!stop) setRole(d?.role);
       } catch {
         // ignore
       }
@@ -87,7 +89,7 @@ const iconFor = (href: string) => {
     case '/profile/submissions':
       return <SendRoundedIcon sx={{ fontSize: 18 }} />;
 
-    // admin (top-level link may come from your nav config later)
+    // admin
     case '/admin':
       return <AdminPanelSettingsRoundedIcon sx={{ fontSize: 18 }} />;
 
@@ -96,11 +98,9 @@ const iconFor = (href: string) => {
   }
 };
 
-import * as React from 'react';
-
 export default function SideMenu({
   open,
-  onClose,
+  onCloseAction,
   publicPrimary,
   authedPrimary,
   authedSecondary
@@ -131,7 +131,7 @@ export default function SideMenu({
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none'
         ].join(' ')}
-        onClick={onClose}
+        onClick={onCloseAction}
       />
 
       {/* Slide-in panel (ease-out cubic) */}
@@ -160,7 +160,7 @@ export default function SideMenu({
               <button
                 type='button'
                 className='h-9 w-9 inline-flex items-center justify-center rounded-lg border border-white/40 hover:opacity-90 bg-white/30'
-                onClick={onClose}
+                onClick={onCloseAction}
                 aria-label='Close menu'
               >
                 <CloseRoundedIcon sx={{ fontSize: 18 }} />
@@ -179,7 +179,7 @@ export default function SideMenu({
                       <Link
                         href={link.href}
                         className='flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-white/40'
-                        onClick={onClose}
+                        onClick={onCloseAction}
                       >
                         {iconFor(link.href)}
                         <span>{link.label}</span>
@@ -201,7 +201,7 @@ export default function SideMenu({
                         <Link
                           href={link.href}
                           className='flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-white/40'
-                          onClick={onClose}
+                          onClick={onCloseAction}
                         >
                           {iconFor(link.href)}
                           <span>{link.label}</span>
@@ -223,7 +223,7 @@ export default function SideMenu({
                           <Link
                             href={link.href}
                             className='flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-white/40'
-                            onClick={onClose}
+                            onClick={onCloseAction}
                           >
                             {iconFor(link.href) ?? (
                               <AdminPanelSettingsRoundedIcon

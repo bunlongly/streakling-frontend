@@ -22,13 +22,13 @@ export default function CreateCardPage() {
               Create Digital Card
             </h1>
             <p className='text-sm text-gray-600 mt-1'>
-              Add your basic info, choose what’s public, and attach socials. You
+              Add your basic info, choose what is public, and attach socials. You
               can publish later.
             </p>
           </header>
 
           {!synced ? (
-            <p className='muted'>Preparing your session…</p>
+            <p className='muted'>Loading...</p>
           ) : (
             <ProfileCardForm />
           )}

@@ -45,7 +45,7 @@ export default function MyProfileClientPage() {
   }, [isLoaded, isSignedIn, synced, router]);
 
   if (!isLoaded || !synced)
-    return <div className='p-6'>Preparing your session…</div>;
+    return <div className='p-6'>Loading...</div>;
   if (err) return <div className='p-6 text-red-600'>{err}</div>;
   if (!profile) return <div className='p-6'>Loading…</div>;
 

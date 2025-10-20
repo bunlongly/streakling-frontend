@@ -1,7 +1,7 @@
 // src/app/(public)/profiles/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import type { PublicProfile } from '@/types/profile';
@@ -72,7 +72,7 @@ function IconBtn({
       type='button'
       aria-label={label}
       onClick={e => {
-        e.stopPropagation(); // don’t navigate the card
+        e.stopPropagation();
         onClick(e);
       }}
       className='flex items-center justify-center h-9 w-9 rounded-full border border-gray-200 bg-white/80 hover:bg-white transition'
@@ -355,38 +355,79 @@ function SkeletonCard() {
 export default function PublicProfilesPage() {
   const [items, setItems] = useState<PublicProfile[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+
   const [q, setQ] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // only for first page skeleton
+  const [searching, setSearching] = useState(false); // for subsequent queries without flashing
   const [err, setErr] = useState<string | null>(null);
   const [initialLoaded, setInitialLoaded] = useState(false);
 
+  const lastQueryRef = useRef<string>('');
+  const abortRef = useRef<AbortController | null>(null);
+
   async function load(reset = false) {
-    setLoading(true);
+    // Cancel any in-flight request to avoid race flashes
+    if (abortRef.current) abortRef.current.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    // UX: show skeleton ONLY on the very first load
+    if (!initialLoaded && reset) setLoading(true);
+    // After initial load, show a light searching hint without clearing grid
+    if (initialLoaded) setSearching(true);
+
     setErr(null);
+
     try {
-      const res = await api.profile.listPublic({
-        q: q || undefined,
-        limit: 24,
-        cursor: reset ? undefined : nextCursor || undefined
-      });
-      setItems(prev => (reset ? res.data.items : [...prev, ...res.data.items]));
+      const res = await api.profile.listPublic(
+        {
+          q: q || undefined,
+          limit: 24,
+          cursor: reset ? undefined : nextCursor || undefined
+        },
+        { signal: ac.signal } 
+      );
+
+      // (Optional) guard: skip users without username
+      const filtered = res.data.items.filter(p => !!p.username?.trim());
+      setItems(prev => (reset ? filtered : [...prev, ...filtered]));
       setNextCursor(res.data.nextCursor);
-    } catch (e: unknown) {
-      setErr(getErrorMessage(e));
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        // Swallow aborts (user typed again)
+      } else {
+        setErr(getErrorMessage(e));
+      }
     } finally {
-      setLoading(false);
+      if (!initialLoaded && reset) setLoading(false);
+      setSearching(false);
       setInitialLoaded(true);
+      lastQueryRef.current = q;
+      // release
+      if (abortRef.current === ac) abortRef.current = null;
     }
   }
 
+  // initial load
   useEffect(() => {
     load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 🔁 debounce when q changes (450ms)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (q !== lastQueryRef.current) load(true);
+    }, 450);
+    return () => {
+      clearTimeout(t);
+      if (abortRef.current) abortRef.current.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
   const triggerSearch = () => load(true);
 
-  // helper to show "X results" nicely
   const resultsLabel = items.length
     ? `${items.length}${nextCursor ? '+' : ''} result${
         items.length > 1 ? 's' : ''
@@ -400,10 +441,18 @@ export default function PublicProfilesPage() {
       {/* header */}
       <div className='flex items-center justify-between gap-4'>
         <h1 className='text-2xl font-semibold'>People</h1>
-        <div className='text-xs text-gray-500'>{resultsLabel}</div>
+        <div className='text-xs text-gray-500 flex items-center gap-2'>
+          {resultsLabel}
+          {searching ? (
+            <span className='inline-flex items-center gap-1 text-[11px] text-gray-500'>
+              <span className='h-2 w-2 rounded-full bg-gray-400 animate-pulse' />
+              Searching…
+            </span>
+          ) : null}
+        </div>
       </div>
 
-      {/* search – soft ring, no dark border */}
+      {/* search */}
       <MagicBorder radius='rounded-2xl'>
         <div className='p-2 md:p-3'>
           <div className='flex items-center gap-2'>
@@ -418,16 +467,13 @@ export default function PublicProfilesPage() {
                     triggerSearch();
                   }
                 }}
-                placeholder='Search by username, name or country…'
+                placeholder='Search by username, industry or country…'
                 className='w-full outline-none'
               />
               {q ? (
                 <button
                   type='button'
-                  onClick={() => {
-                    setQ('');
-                    setTimeout(() => load(true), 0);
-                  }}
+                  onClick={() => setQ('')}
                   className='text-xs text-gray-600 hover:text-gray-900'
                 >
                   Clear
@@ -437,14 +483,14 @@ export default function PublicProfilesPage() {
             <button
               type='button'
               onClick={triggerSearch}
-              disabled={loading}
+              disabled={searching}
               className={[
                 'px-4 py-2 text-sm rounded-xl border border-transparent disabled:opacity-60',
                 'bg-[linear-gradient(120deg,#9e55f7_0%,#447aee_50%,#13b9a3_100%)] text-white',
                 'shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.08)]'
               ].join(' ')}
             >
-              {loading ? 'Searching…' : 'Search'}
+              {searching ? 'Searching…' : 'Search'}
             </button>
           </div>
         </div>
@@ -454,21 +500,22 @@ export default function PublicProfilesPage() {
 
       {/* grid */}
       <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'>
-        {items.map(p => (
-          <ProfileCard key={`${p.id}-${p.username ?? 'nou'}`} p={p} />
-        ))}
-        {!initialLoaded &&
-          Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={`sk-${i}`} />
-          ))}
+        {/* show skeletons only for the very first page load */}
+        {!initialLoaded && loading
+          ? Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={`sk-${i}`} />
+            ))
+          : items.map(p => (
+              <ProfileCard key={`${p.id}-${p.username ?? 'nou'}`} p={p} />
+            ))}
       </div>
 
       {/* empty state */}
-      {initialLoaded && !items.length && !loading && !err ? (
+      {initialLoaded && !items.length && !searching && !err ? (
         <div className='flex flex-col items-center justify-center gap-2 text-center py-10'>
           <div className='text-lg font-medium'>No results</div>
           <div className='text-sm text-gray-500'>
-            Try a different name, username, or country.
+            Try a different username, industry, or country.
           </div>
         </div>
       ) : null}
@@ -478,10 +525,10 @@ export default function PublicProfilesPage() {
         {nextCursor ? (
           <button
             onClick={() => load(false)}
-            disabled={loading}
+            disabled={searching}
             className='px-4 py-2 rounded-xl border bg-white hover:bg-gray-50 disabled:opacity-60'
           >
-            {loading ? 'Loading…' : 'Load more'}
+            {searching ? 'Loading…' : 'Load more'}
           </button>
         ) : initialLoaded && items.length ? (
           <div className='text-sm text-gray-500'>You’ve reached the end.</div>

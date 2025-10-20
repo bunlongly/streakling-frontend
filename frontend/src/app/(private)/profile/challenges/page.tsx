@@ -129,7 +129,7 @@ export default function MyChallengesPage() {
     return (
       <main className='min-h-dvh bg-brand-mix'>
         <section className='max-w-6xl mx-auto px-4 md:px-6 py-10'>
-          <div className={cardCls}>Preparing your session…</div>
+          <div className={cardCls}>Loading…</div>
         </section>
       </main>
     );

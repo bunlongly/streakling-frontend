@@ -16,8 +16,8 @@
   --color-danger: #dc2626;
 }
 
-/* ===== Runtime vars (light only) ===== */
 :root {
+  /* ===== Runtime vars (light only) ===== */
   --color-foreground: var(--color-dark);
   --color-border: color-mix(in oklab, var(--color-dark) 12%, transparent);
   color-scheme: light;
@@ -147,4 +147,17 @@ body {
   100% {
     background-position: 0% 50%;
   }
+}
+.scrollbar-none {
+  -ms-overflow-style: none;      /* IE/Edge */
+  scrollbar-width: none;         /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar { /* Chrome/Safari */
+  display: none;
+}
+
+/* Smooth horizontal scrolling on iOS */
+.overflow-x-smooth {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }

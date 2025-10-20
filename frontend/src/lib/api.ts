@@ -160,10 +160,13 @@ export const apiProfile = {
       init
     ),
 
-  listPublic: (params?: { q?: string; limit?: number; cursor?: string }) =>
+  listPublic: (
+    params?: { q?: string; limit?: number; cursor?: string },
+    init?: RequestInitExtra
+  ) =>
     http.get<ApiSuccess<{ items: PublicProfile[]; nextCursor: string | null }>>(
       '/api/profiles/public',
-      { query: params }
+      { ...(init ?? {}), query: params }
     ),
 
   publicGetById: (id: string, init?: RequestInitExtra) =>
@@ -226,7 +229,7 @@ export const apiCard = {
 
 // ---- Portfolios ----
 export const apiPortfolio = {
-  listPublic: (params?: { limit?: number; cursor?: string }) =>
+  listPublic: (params?: { limit?: number; cursor?: string; q?: string }) =>
     http.get<ApiSuccess<PortfolioPublicList>>('/api/portfolios/public', {
       query: params
     }),

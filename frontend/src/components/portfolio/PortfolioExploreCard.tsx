@@ -103,7 +103,7 @@ export default function PortfolioExploreCard({
         {/* Right: actions */}
         <div className="flex items-center gap-2">
           <Link
-            href={`/portfolio/${encodeURIComponent(portfolio.slug)}`}
+            href={`/profile/portfolio/${encodeURIComponent(portfolio.slug)}`}
             className="
               inline-flex items-center justify-center rounded-full px-3 py-1.5 text-sm font-medium
               bg-gradient-to-r from-[#9e55f7] to-[#447aee] text-white

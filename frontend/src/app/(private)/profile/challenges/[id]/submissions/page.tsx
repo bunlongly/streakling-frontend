@@ -2,11 +2,27 @@
 
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
 import useBackendSessionSync from '@/lib/useBackendSessionSync';
 import { api } from '@/lib/api';
 import type { ChallengeSubmission } from '@/types/challenge';
-import Link from 'next/link';
+
+/* --------- Local types (minimal fields we display) --------- */
+type ChallengeHeader = {
+  id: string;
+  title: string;
+  brandName?: string | null;
+  status?: 'DRAFT' | 'OPEN' | 'CLOSED' | 'ARCHIVED';
+  deadline?: string | null; // ISO
+  images?: Array<{
+    id: string;
+    key?: string | null;
+    url?: string | null;
+    sortOrder?: number;
+  }>;
+};
 
 type PageData = {
   items: ChallengeSubmission[];
@@ -20,16 +36,46 @@ const ALL_STATUSES: Array<ChallengeSubmission['status']> = [
   'WINNER'
 ];
 
-/* ---------- tiny helpers ---------- */
+/* ---------- helpers ---------- */
 function cx(...cls: Array<string | false | null | undefined>) {
   return cls.filter(Boolean).join(' ');
 }
-const BRAND = {
-  primary: 'var(--color-primary)',
-  success: '#22c55e',
-  warn: '#f59e0b',
-  danger: '#ef4444'
-};
+
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || null;
+function toPublicUrl(key?: string | null): string | null {
+  if (!key) return null;
+  return /^https?:\/\//i.test(key)
+    ? key
+    : PUBLIC_BASE
+    ? `${PUBLIC_BASE}/${key}`
+    : null;
+}
+
+function getErrorMessage(e: unknown, fallback = 'Something went wrong') {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return fallback;
+}
+
+function chipToneByChallengeStatus(s?: string) {
+  const t = (s || '').toUpperCase();
+  if (t === 'OPEN')
+    return [
+      'bg-emerald-100/80',
+      'text-emerald-800',
+      'ring-emerald-300/60'
+    ] as const;
+  if (t === 'CLOSED')
+    return ['bg-gray-100/80', 'text-gray-800', 'ring-gray-300/60'] as const;
+  if (t === 'ARCHIVED')
+    return ['bg-zinc-100/80', 'text-zinc-800', 'ring-zinc-300/60'] as const;
+  return ['bg-slate-100/80', 'text-slate-800', 'ring-slate-300/60'] as const;
+}
+
+/* ---------- UI atoms ---------- */
 
 function StatusBadge({ status }: { status: ChallengeSubmission['status'] }) {
   const tone =
@@ -65,13 +111,15 @@ function StatusBadge({ status }: { status: ChallengeSubmission['status'] }) {
   );
 }
 
-function Pill({
+function SegmentedButton({
   active,
   children,
+  count,
   onClick
 }: {
   active?: boolean;
   children: React.ReactNode;
+  count?: number;
   onClick?: () => void;
 }) {
   return (
@@ -84,7 +132,21 @@ function Pill({
           : 'text-gray-700 ring-gray-200/80 hover:bg-white/60 hover:shadow-sm'
       )}
     >
-      {children}
+      <span className='inline-flex items-center gap-1'>
+        {children}
+        {typeof count === 'number' ? (
+          <span
+            className={cx(
+              'ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px]',
+              active
+                ? 'bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]'
+                : 'bg-gray-100 text-gray-700'
+            )}
+          >
+            {count}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }
@@ -188,17 +250,21 @@ export default function OwnerSubmissionsPage({
   const synced = useBackendSessionSync();
 
   const [data, setData] = useState<PageData | null>(null);
+  const [challenge, setChallenge] = useState<ChallengeHeader | null>(null);
+
   const [err, setErr] = useState<string | null>(null);
   const [flash, setFlash] = useState<{
     type: 'success' | 'error';
     msg: string;
   } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
   const [filter, setFilter] = useState<'ALL' | ChallengeSubmission['status']>(
     'ALL'
   );
   const [query, setQuery] = useState('');
 
+  // Load + append (better pagination UX)
   async function load(cursor?: string | null) {
     setErr(null);
     try {
@@ -206,15 +272,45 @@ export default function OwnerSubmissionsPage({
         limit: 100,
         cursor: cursor ?? undefined
       });
-      setData(res.data);
-    } catch (e: any) {
-      setErr(e?.message || 'Failed to load submissions');
+      if (!data || !cursor) {
+        setData(res.data);
+      } else {
+        setData({
+          items: [...data.items, ...res.data.items],
+          nextCursor: res.data.nextCursor
+        });
+      }
+    } catch (e: unknown) {
+      setErr(getErrorMessage(e, 'Failed to load submissions'));
+    }
+  }
+
+  // Load challenge header
+  async function loadChallenge() {
+    try {
+      const r = await api.challenge.getById(challengeId);
+      const c = r.data;
+      const header: ChallengeHeader = {
+        id: c.id,
+        title: c.title,
+        brandName: c.brandName ?? null,
+        status: c.status,
+        deadline: c.deadline ?? null,
+        images: Array.isArray(c.images) ? c.images : []
+      };
+      setChallenge(header);
+    } catch (e: unknown) {
+      // Still allow page to function
+      setChallenge(null);
+      setErr(prev => prev ?? getErrorMessage(e, 'Failed to load challenge'));
     }
   }
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !synced) return;
     void load();
+    void loadChallenge();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn, synced, challengeId]);
 
   async function changeStatus(
@@ -226,10 +322,18 @@ export default function OwnerSubmissionsPage({
     setFlash(null);
     try {
       await api.challenge.updateSubmissionStatus(challengeId, id, status);
-      await load();
+      // Optimistic update
+      setData(prev =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map(s => (s.id === id ? { ...s, status } : s))
+            }
+          : prev
+      );
       setFlash({ type: 'success', msg: `Updated to ${status}.` });
-    } catch (e: any) {
-      const msg = e?.message || 'Failed to update status';
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e, 'Failed to update status');
       setErr(msg);
       setFlash({ type: 'error', msg });
     } finally {
@@ -237,6 +341,19 @@ export default function OwnerSubmissionsPage({
       setTimeout(() => setFlash(null), 2400);
     }
   }
+
+  const counts = useMemo(() => {
+    const items = data?.items ?? [];
+    const base = {
+      ALL: items.length,
+      PENDING: 0,
+      APPROVED: 0,
+      REJECTED: 0,
+      WINNER: 0
+    } as Record<'ALL' | ChallengeSubmission['status'], number>;
+    for (const s of items) base[s.status] += 1;
+    return base;
+  }, [data]);
 
   const filtered = useMemo(() => {
     const items = data?.items ?? [];
@@ -266,7 +383,7 @@ export default function OwnerSubmissionsPage({
       <div className='min-h-dvh bg-brand-mix'>
         <div className='max-w-6xl mx-auto px-4'>
           <ToolbarSkeleton />
-          <div className='py-10 text-gray-700'>Preparing your session…</div>
+          <div className='py-10 text-gray-700'>Loading…</div>
         </div>
       </div>
     );
@@ -305,104 +422,184 @@ export default function OwnerSubmissionsPage({
     );
   }
 
+  /* ---------- header: challenge summary ---------- */
+  const cover =
+    (challenge?.images &&
+      challenge.images[0] &&
+      (challenge.images[0].url || toPublicUrl(challenge.images[0].key))) ||
+    null;
+
+  const deadline = challenge?.deadline
+    ? (() => {
+        const d = new Date(challenge.deadline!);
+        return Number.isNaN(d.getTime())
+          ? challenge.deadline!.slice(0, 10)
+          : d.toLocaleDateString();
+      })()
+    : null;
+
   /* ---------- UI ---------- */
 
   return (
     <main className='min-h-dvh bg-brand-mix'>
       <div className='max-w-6xl mx-auto px-4 pb-16'>
-        {/* Sticky, glass toolbar */}
-        <div className='sticky top-0 z-20 -mx-4 px-4 pt-4 backdrop-blur-md'>
-          <div className='card-surface rounded-2xl shadow-sm ring-1 ring-white/40 px-4 py-4'>
-            <div className='flex flex-wrap items-center gap-3'>
-              <h1 className='text-2xl font-semibold tracking-tight'>
-                Submissions
-                <span className='ms-2 text-sm text-gray-600 font-normal'>
-                  {filtered.length} of {data.items.length} shown
-                </span>
-              </h1>
-
-              <div className='ms-auto flex items-center gap-2'>
-                <div className='hidden md:flex items-center gap-2'>
-                  <Pill
-                    active={filter === 'ALL'}
-                    onClick={() => setFilter('ALL')}
-                  >
-                    All
-                  </Pill>
-                  {ALL_STATUSES.map(s => (
-                    <Pill
-                      key={s}
-                      active={filter === s}
-                      onClick={() => setFilter(s)}
-                    >
-                      {s}
-                    </Pill>
-                  ))}
-                </div>
-
-                {/* search */}
-                <div className='relative w-[260px] max-w-full'>
-                  <input
-                    className='w-full rounded-xl border border-white/40 bg-white/70 px-3 py-2.5 pr-9 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,.4)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30'
-                    placeholder='Search by name, handle, link…'
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
+        {/* Challenge Summary */}
+        <section className='pt-6'>
+          <div className='rounded-2xl bg-white/80 ring-1 ring-black/5 shadow-sm p-4 md:p-5'>
+            <div className='flex flex-col sm:flex-row sm:items-start gap-4'>
+              <div className='relative h-20 w-full sm:w-32 md:w-40 sm:h-24 overflow-hidden rounded-xl ring-1 ring-gray-200 bg-white'>
+                {cover ? (
+                  <Image
+                    src={cover}
+                    alt='Challenge cover'
+                    fill
+                    className='object-cover'
+                    sizes='(max-width:640px) 100vw, 160px'
                   />
-                  <svg
-                    className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400'
-                    viewBox='0 0 20 20'
-                    fill='currentColor'
-                    aria-hidden
-                  >
-                    <path
-                      fillRule='evenodd'
-                      d='M12.9 14.32a7 7 0 111.414-1.414l3.387 3.386a1 1 0 01-1.414 1.415l-3.387-3.387zM14 9a5 5 0 11-10 0 5 5 0 0110 0z'
-                      clipRule='evenodd'
-                    />
-                  </svg>
+                ) : (
+                  <div className='grid h-full w-full place-items-center text-xs text-gray-500'>
+                    No cover
+                  </div>
+                )}
+              </div>
+
+              <div className='min-w-0 flex-1'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <h1 className='text-xl md:text-2xl font-semibold tracking-tight truncate'>
+                    {challenge?.title ?? 'Challenge'}
+                  </h1>
+                  {challenge?.status ? (
+                    <span
+                      className={cx(
+                        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1',
+                        ...chipToneByChallengeStatus(challenge.status)
+                      )}
+                    >
+                      {challenge.status}
+                    </span>
+                  ) : null}
+                </div>
+                <div className='mt-1 text-sm text-gray-700'>
+                  {challenge?.brandName ? (
+                    <span className='font-medium'>{challenge.brandName}</span>
+                  ) : (
+                    <span>—</span>
+                  )}
+                  {deadline ? (
+                    <span className='ml-2 text-gray-500'>
+                      • Deadline:{' '}
+                      <span className='text-gray-800'>{deadline}</span>
+                    </span>
+                  ) : null}
                 </div>
 
+                <div className='mt-3 flex flex-wrap items-center gap-2 text-sm'>
+                  <span className='inline-flex items-center rounded-xl bg-gray-50 ring-1 ring-gray-200 px-2.5 py-1'>
+                    Total submissions:{' '}
+                    <span className='ml-1 font-semibold'>{counts.ALL}</span>
+                  </span>
+                  <span className='inline-flex items-center rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-2.5 py-1'>
+                    Approved:{' '}
+                    <span className='ml-1 font-semibold'>
+                      {counts.APPROVED}
+                    </span>
+                  </span>
+                  <span className='inline-flex items-center rounded-xl bg-amber-50 ring-1 ring-amber-200 px-2.5 py-1'>
+                    Winners:{' '}
+                    <span className='ml-1 font-semibold'>{counts.WINNER}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className='sm:ml-auto'>
                 <Link
                   href={`/profile/challenges/${challengeId}`}
-                  className='hidden sm:inline-block rounded-xl px-3 py-2 text-sm ring-1 ring-white/50 hover:bg-white/60'
+                  className='inline-flex items-center rounded-xl px-3 py-2 text-sm ring-1 ring-gray-200 bg-white/80 hover:bg-white transition'
                 >
                   ← Back to edit
                 </Link>
               </div>
+            </div>
+          </div>
+        </section>
 
-              {/* mobile filter row */}
-              <div className='md:hidden flex w-full flex-wrap gap-2 pt-2'>
-                <Pill
+        {/* Sticky toolbar w/ enhanced filter */}
+        <div className='sticky top-0 z-20 -mx-4 px-4 pt-4 backdrop-blur-md'>
+          <div className='rounded-2xl bg-white/70 shadow-sm ring-1 ring-white/40 px-4 py-4'>
+            <div className='flex flex-col gap-3 md:flex-row md:items-center'>
+              {/* Segmented filter (desktop) */}
+              <div className='hidden md:flex items-center gap-2'>
+                <SegmentedButton
                   active={filter === 'ALL'}
+                  count={counts.ALL}
                   onClick={() => setFilter('ALL')}
                 >
                   All
-                </Pill>
+                </SegmentedButton>
                 {ALL_STATUSES.map(s => (
-                  <Pill
+                  <SegmentedButton
                     key={s}
                     active={filter === s}
+                    count={counts[s]}
                     onClick={() => setFilter(s)}
                   >
-                    {s}
-                  </Pill>
+                    {s.charAt(0) + s.slice(1).toLowerCase()}
+                  </SegmentedButton>
                 ))}
               </div>
 
-              {/* flash */}
-              {flash ? (
-                <div
-                  className={cx(
-                    'w-full rounded-xl px-3 py-2 text-sm ring-1',
-                    flash.type === 'success'
-                      ? 'bg-emerald-50/90 text-emerald-700 ring-emerald-200/80'
-                      : 'bg-rose-50/90 text-rose-700 ring-rose-200/80'
-                  )}
+              {/* Mobile select filter */}
+              <div className='md:hidden'>
+                <select
+                  value={filter}
+                  onChange={e => setFilter(e.target.value as typeof filter)}
+                  className='w-full rounded-xl border border-white/50 bg-white/80 px-3 py-2 text-sm'
                 >
-                  {flash.msg}
-                </div>
-              ) : null}
+                  <option value='ALL'>All ({counts.ALL})</option>
+                  {ALL_STATUSES.map(s => (
+                    <option key={s} value={s}>
+                      {s.charAt(0) + s.slice(1).toLowerCase()} ({counts[s]})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* search */}
+              <div className='relative w-full md:w-[280px] md:ml-auto'>
+                <input
+                  className='w-full rounded-xl border border-white/40 bg-white/80 px-3 py-2.5 pr-9 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,.4)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30'
+                  placeholder='Search by name, handle, link…'
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                />
+                <svg
+                  className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400'
+                  viewBox='0 0 20 20'
+                  fill='currentColor'
+                  aria-hidden
+                >
+                  <path
+                    fillRule='evenodd'
+                    d='M12.9 14.32a7 7 0 111.414-1.414l3.387 3.386a1 1 0 01-1.414 1.415l-3.387-3.387zM14 9a5 5 0 11-10 0 5 5 0 0110 0z'
+                    clipRule='evenodd'
+                  />
+                </svg>
+              </div>
             </div>
+
+            {/* flash */}
+            {flash ? (
+              <div
+                className={cx(
+                  'mt-3 rounded-xl px-3 py-2 text-sm ring-1',
+                  flash.type === 'success'
+                    ? 'bg-emerald-50/90 text-emerald-700 ring-emerald-200/80'
+                    : 'bg-rose-50/90 text-rose-700 ring-rose-200/80'
+                )}
+              >
+                {flash.msg}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -433,7 +630,7 @@ export default function OwnerSubmissionsPage({
               const submittedAt = (() => {
                 try {
                   const d = new Date(s.createdAt);
-                  return isNaN(d.getTime())
+                  return Number.isNaN(d.getTime())
                     ? s.createdAt.slice(0, 19).replace('T', ' ')
                     : d.toLocaleString();
                 } catch {
@@ -441,77 +638,99 @@ export default function OwnerSubmissionsPage({
                 }
               })();
 
+              const proofUrl = toPublicUrl(s.imageKey);
+
               return (
                 <li
                   key={s.id}
-                  className='rounded-2xl bg-white/75 ring-1 ring-black/5 shadow-[0_2px_10px_rgba(0,0,0,.04)] hover:shadow-[0_6px_16px_rgba(0,0,0,.06)] transition'
+                  className='rounded-2xl bg-white/80 ring-1 ring-black/5 shadow-[0_2px_10px_rgba(0,0,0,.04)] hover:shadow-[0_6px_16px_rgba(0,0,0,.06)] transition'
                 >
                   <div className='p-4 md:p-5'>
-                    <div className='flex flex-col md:flex-row md:items-start md:justify-between gap-4'>
-                      {/* left */}
-                      <div className='space-y-2'>
-                        <div className='flex flex-wrap items-center gap-2'>
-                          <span className='text-sm text-gray-500'>
-                            #{s.submissionOrder}
-                          </span>
-                          <span className='font-semibold'>{s.platform}</span>
-                          <StatusBadge status={s.status} />
+                    <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
+                      {/* left block: thumbnail + meta */}
+                      <div className='flex min-w-0 items-start gap-4'>
+                        <div className='relative h-16 w-16 shrink-0 overflow-hidden rounded-xl ring-1 ring-gray-200 bg-white'>
+                          {proofUrl ? (
+                            <Image
+                              src={proofUrl}
+                              alt='Submission proof'
+                              fill
+                              sizes='64px'
+                              className='object-cover'
+                            />
+                          ) : (
+                            <div className='grid h-full w-full place-items-center text-[11px] text-gray-500'>
+                              No image
+                            </div>
+                          )}
                         </div>
 
-                        <div className='text-sm text-gray-800 space-y-1.5'>
-                          {s.submitterName ? (
-                            <div>
-                              <span className='text-gray-500'>By: </span>
-                              <span className='font-medium'>
-                                {s.submitterName}
-                              </span>
-                            </div>
-                          ) : null}
+                        <div className='min-w-0 space-y-1.5'>
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <span className='text-sm text-gray-500'>
+                              #{s.submissionOrder}
+                            </span>
+                            <span className='font-semibold'>{s.platform}</span>
+                            <StatusBadge status={s.status} />
+                          </div>
 
-                          {s.submitterId ? (
-                            <div>
-                              <span className='text-gray-500'>Profile: </span>
-                              <Link
-                                href={`/profiles/${encodeURIComponent(
-                                  s.submitterId
-                                )}`}
-                                className='underline underline-offset-2 text-[color:var(--color-primary)]'
-                              >
-                                View submitter
-                              </Link>
-                            </div>
-                          ) : null}
+                          <div className='text-sm text-gray-800 space-y-1.5'>
+                            {s.submitterName ? (
+                              <div>
+                                <span className='text-gray-500'>By: </span>
+                                <span className='font-medium'>
+                                  {s.submitterName}
+                                </span>
+                              </div>
+                            ) : null}
 
-                          {s.linkUrl ? (
-                            <div className='break-all'>
-                              <span className='text-gray-500'>Link: </span>
-                              <a
-                                href={s.linkUrl}
-                                target='_blank'
-                                rel='noreferrer'
-                                className='underline underline-offset-2 text-[color:var(--color-primary)]'
-                              >
-                                {s.linkUrl}
-                              </a>
-                            </div>
-                          ) : null}
+                            {s.submitterId ? (
+                              <div>
+                                <span className='text-gray-500'>Profile: </span>
+                                <Link
+                                  href={`/profiles/${encodeURIComponent(
+                                    s.submitterId
+                                  )}`}
+                                  className='no-underline text-gray-900 hover:opacity-80'
+                                  title='View submitter profile'
+                                >
+                                  View submitter
+                                </Link>
+                              </div>
+                            ) : null}
 
-                          {Array.isArray(s.submitterSocials) &&
-                          s.submitterSocials.length ? (
-                            <div className='text-xs text-gray-600'>
-                              <span className='text-gray-500'>Socials:</span>{' '}
-                              {s.submitterSocials
-                                .map(
-                                  x =>
-                                    x.handle || x.url || x.label || x.platform
-                                )
-                                .filter(Boolean)
-                                .join(' • ')}
-                            </div>
-                          ) : null}
+                            {s.linkUrl ? (
+                              <div className='break-all'>
+                                <span className='text-gray-500'>Link: </span>
+                                <a
+                                  href={s.linkUrl}
+                                  target='_blank'
+                                  rel='noreferrer'
+                                  className='no-underline text-gray-900 hover:opacity-80'
+                                  title='Open submitted link'
+                                >
+                                  {s.linkUrl}
+                                </a>
+                              </div>
+                            ) : null}
 
-                          <div className='text-xs text-gray-500'>
-                            Submitted: {submittedAt}
+                            {Array.isArray(s.submitterSocials) &&
+                            s.submitterSocials.length ? (
+                              <div className='text-xs text-gray-600'>
+                                <span className='text-gray-500'>Socials:</span>{' '}
+                                {s.submitterSocials
+                                  .map(
+                                    x =>
+                                      x.handle || x.url || x.label || x.platform
+                                  )
+                                  .filter(Boolean)
+                                  .join(' • ')}
+                              </div>
+                            ) : null}
+
+                            <div className='text-xs text-gray-500'>
+                              Submitted: {submittedAt}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -567,7 +786,7 @@ export default function OwnerSubmissionsPage({
         {data.nextCursor ? (
           <div className='pt-6'>
             <button
-              onClick={() => load(data.nextCursor)}
+              onClick={() => void load(data.nextCursor)}
               className='mx-auto block rounded-xl px-4 py-2 text-sm font-medium ring-1 ring-white/50 bg-white/70 hover:bg-white shadow-sm'
             >
               Load more

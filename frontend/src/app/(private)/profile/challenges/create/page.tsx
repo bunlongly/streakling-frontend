@@ -16,7 +16,7 @@ export default function CreateChallengePage() {
       <main className="min-h-dvh bg-brand-mix">
         <section className="max-w-4xl mx-auto px-4 md:px-6 py-10">
           <div className="rounded-2xl border border-token bg-white/70 p-6 shadow-[0_1px_2px_rgba(10,10,15,0.06),_0_12px_24px_rgba(10,10,15,0.06)]">
-            Preparing your session…
+            Loading…
           </div>
         </section>
       </main>
