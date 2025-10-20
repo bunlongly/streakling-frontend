@@ -1,9 +1,8 @@
 // src/components/profile/ProfileQR.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import QRCode from 'qrcode';
 
 type Props = {
   url: string;
@@ -25,19 +24,29 @@ export default function ProfileQR({
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const fileName = useMemo(
+    () =>
+      ((label || 'profile').toLowerCase().replace(/\s+/g, '-') || 'profile') +
+      '-qr.png',
+    [label]
+  );
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const png = await QRCode.toDataURL(url, {
+        // ✅ dynamic import; don't reference a "QRCode" symbol
+        const { toDataURL } = await import('qrcode');
+        const png = await toDataURL(url, {
           width: size,
           margin: 1,
           errorCorrectionLevel: 'M',
           color: { dark: '#000000', light: '#ffffff' }
         });
         if (alive) setDataUrl(png);
-      } catch {
-        setDataUrl(null);
+      } catch (err) {
+        console.error('QR generation failed:', err);
+        if (alive) setDataUrl(null);
       }
     })();
     return () => {
@@ -45,20 +54,22 @@ export default function ProfileQR({
     };
   }, [url, size]);
 
-  const fileName =
-    (label || 'profile').toLowerCase().replace(/\s+/g, '-') + '-qr.png';
-
   async function copy() {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {}
+    } catch {
+      // ignore
+    }
   }
 
   if (!dataUrl) {
     return (
-      <div className='rounded-2xl bg-white/80 p-4 shadow-sm text-sm text-gray-500'>
+      <div
+        className='rounded-2xl bg-white/80 p-4 shadow-sm text-sm text-gray-500'
+        aria-live='polite'
+      >
         Generating QR…
       </div>
     );
@@ -70,7 +81,6 @@ export default function ProfileQR({
         <div className='mb-2 text-xs font-medium text-gray-600'>{label}</div>
       )}
 
-      {/* No borders anywhere */}
       <div className='relative rounded-xl overflow-hidden'>
         <Image
           src={dataUrl}
