@@ -13,7 +13,7 @@ export default function OverviewShowcase() {
       <div className='mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-14 sm:py-20 md:grid-cols-2 md:gap-16'>
         {/* Left: Copy */}
         <div>
-          <span className='inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white/80'>
+          <span className='inline-flex items-center gap-2 rounded-full border border-black/15 bg-black/10 px-3 py-1 text-xs text-black/80'>
             <span className='inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--color-primary)]' />
             Product Overview
           </span>
@@ -28,14 +28,12 @@ export default function OverviewShowcase() {
             across industries. One profile, one scan—everything your audience
             needs.
           </p>
-
           <ul className='mt-5 space-y-2 text-[15px]'>
             <li>• Build once, share anywhere</li>
             <li>• Showcase projects with images & video</li>
             <li>• Join challenges and gain visibility</li>
             <li>• Track engagement and growth</li>
           </ul>
-
           <div className='mt-6 flex flex-wrap gap-3'>
             <Link
               href='/profile/cards/create'

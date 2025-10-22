@@ -155,33 +155,35 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
 
     return (
       <main className='min-h-[80vh] text-foreground'>
-        {/* ================= HERO ================= */}
-        <section className='relative z-0'>
-          {/* gradient base */}
+        {/* ================= HERO (full width, taller; no overlay gradient) ================= */}
+        <section className='relative w-full'>
+          {/* When there's no banner, show a soft gradient background as a fallback */}
           <div
-            className='
-              relative
-              h-56 sm:h-64 w-full
-              bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)]
-              bg-[length:220%_220%] animate-[border-pan_14s_ease-in-out_infinite]
-              opacity-90
-            '
+            className={[
+              'relative w-full',
+              // Taller, responsive hero height
+              'min-h-[36vh] sm:min-h-[44vh] lg:min-h-[52vh]'
+            ].join(' ')}
           >
-            {banner && (
+            {banner ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={banner}
                 alt='banner'
-                className='absolute inset-0 h-full w-full object-cover mix-blend-overlay opacity-60'
+                className='absolute inset-0 h-full w-full object-cover'
               />
+            ) : (
+              <div className='absolute inset-0 bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)]' />
             )}
           </div>
         </section>
 
-        {/* ===== Header: avatar + name (brought to front) ===== */}
-        <section className='relative z-10 -mt-12 sm:-mt-14'>
+        {/* ===== Header: avatar + name =====
+            Pull the header up over the hero, but leave comfortable space
+            so it never collides visually with the navbar. */}
+        <section className='relative -mt-16 sm:-mt-20'>
           <div className='max-w-6xl mx-auto px-4 sm:px-6 flex items-end gap-4'>
-            {/* avatar: high z-index + crisp white ring so it clearly sits above hero */}
+            {/* avatar with ring */}
             <div className='relative z-20 shrink-0'>
               <div className='p-[3px] rounded-full bg-[linear-gradient(120deg,#7b39e8_0%,#2d69ea_55%,#10a991_100%)] shadow-lg ring-8 ring-white'>
                 <div className='h-24 w-24 sm:h-28 sm:w-28 rounded-full overflow-hidden bg-white'>
@@ -216,11 +218,12 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
         </section>
 
         {/* ================= BODY ================= */}
-        <section className='pt-8 pb-20'>
+        <section className='pt-10 pb-20'>
           <div className='max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-12 gap-8'>
             {/* ---------- Sidebar (sticky) ---------- */}
             <aside className='col-span-12 lg:col-span-4'>
-              <div className='lg:sticky lg:top-24 space-y-6'>
+              {/* push the sticky block further down so it never touches the navbar bg */}
+              <div className='lg:sticky lg:top-44 space-y-6'>
                 {/* Contacts */}
                 <MagicBorder radius='rounded-2xl' className='shadow-sm'>
                   <div className='rounded-2xl bg-white/70 backdrop-blur p-6'>
@@ -354,7 +357,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                 </section>
               )}
 
-              {/* ===== Education timeline (dot at top) ===== */}
+              {/* Education */}
               {edus.length > 0 && (
                 <section>
                   <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>
@@ -387,7 +390,7 @@ export default async function PublicPortfolioPage({ params }: PageProps) {
                 </section>
               )}
 
-              {/* ===== Top-level Video Links ===== */}
+              {/* Top-level Video Links */}
               {topVideos.length > 0 && (
                 <section>
                   <h2 className='text-sm font-semibold tracking-wide text-neutral-600 mb-4'>

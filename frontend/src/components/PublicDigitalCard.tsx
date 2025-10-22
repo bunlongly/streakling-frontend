@@ -185,20 +185,9 @@ export default function PublicDigitalCard({ card }: Props) {
   const bannerUrl =
     card.bannerKey && S3_PUBLIC ? `${S3_PUBLIC}/${card.bannerKey}` : undefined;
 
-  // Independent slugs (as users configure them)
-  // If your type doesn't include profileSlug / portfolioSlug yet, they’ll be undefined
-  // and we gracefully fall back to appName or digital card slug where sensible.
-  const profileSlug =
-    (card as any).profileSlug ?? card.slug ?? card.appName ?? null;
-  const portfolioSlug =
-    (card as any).portfolioSlug ?? card.appName ?? card.slug ?? null;
+  const profileHref = '/profiles';
 
-  const profileHref = profileSlug
-    ? `/profile/${encodeURIComponent(profileSlug)}`
-    : null;
-  const portfolioHref = portfolioSlug
-    ? `/profile/portfolio/${encodeURIComponent(portfolioSlug)}`
-    : null;
+  const portfolioHref = '/profile/portfolio';
 
   return (
     <MagicBorder radius='rounded-3xl' className='bg-transparent'>

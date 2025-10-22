@@ -455,7 +455,7 @@ export default function HomePage() {
                 Browse challenges
               </Link>
               <Link
-                href='/challenges/submit'
+                href='/challenges'
                 className='inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium border border-black/10 bg-white/70 backdrop-blur hover:bg-white/90 transition'
               >
                 Submit your entry
