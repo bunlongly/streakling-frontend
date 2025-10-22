@@ -70,7 +70,7 @@ export default function OverviewShowcase() {
                 loop
                 playsInline
                 poster='/hero-poster.jpg'
-                src='/overview.mp4'
+                src='https://streakling.s3.ap-southeast-1.amazonaws.com/video/overview.mp4'
                 preload='none'
                 rootMargin='400px'
               />

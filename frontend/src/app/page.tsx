@@ -198,7 +198,7 @@ export default function HomePage() {
           poster='/hero-poster.jpg'
           preload='metadata' /* helps first paint without heavy buffering */
         >
-          <source src='/video-intro.mp4' type='video/mp4' />
+          <source src='https://streakling.s3.ap-southeast-1.amazonaws.com/video/video-intro.mp4' type='video/mp4'/>
         </video>
 
         <div className='pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/50' />
@@ -359,7 +359,7 @@ export default function HomePage() {
                 loop
                 playsInline
                 poster='/hero-poster.jpg'
-                src='/content-creators.mp4'
+                src='https://streakling.s3.ap-southeast-1.amazonaws.com/video/content-creators.mp4'
                 preload='none'
                 rootMargin='400px'
               />
@@ -473,7 +473,7 @@ export default function HomePage() {
                 loop
                 playsInline
                 poster='/hero-poster.jpg'
-                src='/challenge.mp4'
+                src='https://streakling.s3.ap-southeast-1.amazonaws.com/video/challenge.mp4'
                 preload='none'
                 rootMargin='400px'
               />
