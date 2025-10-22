@@ -56,7 +56,7 @@ export default function EditChallengePage() {
       <div className='flex items-center justify-between'>
         <h1 className='text-2xl font-semibold'>Edit Challenge</h1>
         <Link
-          href='/public/challenges'
+          href='/challenges'
           className='px-3 py-1.5 rounded-lg border'
         >
           Back

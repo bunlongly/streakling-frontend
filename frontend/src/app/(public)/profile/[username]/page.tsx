@@ -6,6 +6,7 @@ import type { PublicProfile } from '@/types/profile';
 import ProfileQR from '@/components/profile/ProfileQR';
 import FlipCard from '@/components/ui/FlipCard';
 import MagicBorder from '@/components/ui/MagicBorder';
+import ClientProfileActions from '@/components/profile/ClientProfileActions';
 
 function previewFromAnywhere(key?: string | null, url?: string | null) {
   const PUBLIC_BASE = process.env.NEXT_PUBLIC_S3_PUBLIC_BASE || '';
@@ -20,10 +21,10 @@ function previewFromAnywhere(key?: string | null, url?: string | null) {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL || '';
 
-type Props = { params: Promise<{ username: string }> }; // ✅ params is a Promise in Next 15
+type Props = { params: Promise<{ username: string }> }; // Next 15: params is a Promise
 
 export default async function PublicProfilePage({ params }: Props) {
-  const { username } = await params; // ✅ await the params
+  const { username } = await params;
 
   const res = await api.profile
     .publicGetByUsername(username, { cache: 'no-store' })
@@ -39,7 +40,9 @@ export default async function PublicProfilePage({ params }: Props) {
     : `/profile/${encodeURIComponent(username)}`;
 
   const primaryIndustry = p.industries?.[0]?.name ?? 'Member';
-  const portfolioHref = `/profile/${encodeURIComponent(username)}/portfolio`;
+  const portfolioHref = `/profile/portfolio`;
+  const digitalCardHref = `/profile/digitalcard`;
+
   const fallbackLetter = (p.displayName || p.username || 'C')
     .trim()
     .charAt(0)
@@ -105,7 +108,8 @@ export default async function PublicProfilePage({ params }: Props) {
 
               {/* QR */}
               <div className='h-[66%] px-4 py-5'>
-                <div className='mx-auto w-full max-w-[260px]'>
+                {/* Give the QR a stable root so the client can export PNG */}
+                <div id='qr-root' className='mx-auto w-full max-w-[260px]'>
                   <ProfileQR
                     url={profileUrl}
                     label={p.displayName || 'Profile'}
@@ -143,77 +147,75 @@ export default async function PublicProfilePage({ params }: Props) {
                 </div>
               </div>
 
-              {/* Details (no borders) */}
+              {/* Details — refined */}
               <div className='px-4 pt-4 pb-6'>
-                <div className='text-sm text-gray-500 mb-2'>Public details</div>
+                <div className='text-sm text-gray-600 mb-2'>Public details</div>
 
-                <div className='divide-y divide-gray-100 rounded-xl bg-white'>
-                  {p.showEmail && p.email ? (
-                    <Row label='Email' value={p.email} />
-                  ) : null}
-                  {p.showPhone && p.phone ? (
-                    <Row label='Phone' value={p.phone} />
-                  ) : null}
-                  {p.showCountry && p.country ? (
-                    <Row label='Country' value={p.country} />
-                  ) : null}
-                  {p.showReligion && p.religion ? (
-                    <Row label='Religion' value={p.religion} />
-                  ) : null}
-                  {p.showDateOfBirth && p.dateOfBirth ? (
-                    <Row label='DOB' value={p.dateOfBirth.slice(0, 10)} />
+                <div className='rounded-2xl border border-gray-100 bg-white shadow-[0_6px_14px_rgba(0,0,0,0.04)]'>
+                  <div className='p-4 space-y-3'>
+                    {p.showEmail && p.email ? (
+                      <Row label='Email' value={p.email} />
+                    ) : null}
+                    {p.showPhone && p.phone ? (
+                      <Row label='Phone' value={p.phone} />
+                    ) : null}
+                    {p.showCountry && p.country ? (
+                      <Row label='Country' value={p.country} />
+                    ) : null}
+                    {p.showReligion && p.religion ? (
+                      <Row label='Religion' value={p.religion} />
+                    ) : null}
+                    {p.showDateOfBirth && p.dateOfBirth ? (
+                      <Row label='DOB' value={p.dateOfBirth.slice(0, 10)} />
+                    ) : null}
+                  </div>
+
+                  {p.industries?.length ? (
+                    <div className='px-4 pb-4'>
+                      <div className='text-gray-600 text-sm mb-1'>
+                        Industries
+                      </div>
+                      <div className='flex flex-wrap gap-2'>
+                        {p.industries.map(ind => (
+                          <span
+                            key={ind.slug}
+                            className='px-2.5 py-1 rounded-full border border-gray-200 bg-white text-xs text-gray-800'
+                          >
+                            {ind.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 
-                {p.industries?.length ? (
-                  <div className='mt-3'>
-                    <div className='text-gray-600 text-sm mb-1'>Industries</div>
-                    <div className='flex flex-wrap gap-2'>
-                      {p.industries.map(ind => (
-                        <span
-                          key={ind.slug}
-                          className='px-2.5 py-1 rounded-full border text-xs bg-white'
-                        >
-                          {ind.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
                 {/* CTAs */}
-                <div className='mt-4 flex flex-wrap gap-2'>
+                <div className='mt-4 grid grid-cols-2 gap-2'>
                   <Link
                     href={portfolioHref}
-                    className='px-3 py-1.5 text-sm rounded-full border bg-white hover:bg-gray-50'
+                    className='px-3 py-2 text-sm rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-center'
                     data-stopflip='true'
                   >
                     View portfolio
                   </Link>
                   <Link
-                    href={`/profile/${encodeURIComponent(p.username || '')}`}
-                    className='px-3 py-1.5 text-sm rounded-full border bg-white hover:bg-gray-50'
+                    href={digitalCardHref}
+                    className='px-3 py-2 text-sm rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-center'
                     data-stopflip='true'
                   >
                     View digital card
                   </Link>
-                  <a
-                    href={profileUrl}
-                    className='px-3 py-1.5 text-sm rounded-full border bg-white hover:bg-gray-50'
-                    data-stopflip='true'
-                  >
-                    Copy link
-                  </a>
-                  <a
-                    href='#download-qr'
-                    className='px-3 py-1.5 text-sm rounded-full border bg-white hover:bg-gray-50'
-                    data-stopflip='true'
-                  >
-                    Download PNG
-                  </a>
+
+                  {/* Client actions (copy + download + flash) */}
+                  <ClientProfileActions
+                    profileUrl={profileUrl}
+                    fileName={`streakling-qr-${p.username || p.id}.png`}
+                    qrRootId='qr-root'
+                  />
                 </div>
 
-                <div className='mt-3'>
+                {/* Flip hint */}
+                <div className='mt-3 flex justify-center'>
                   <button
                     type='button'
                     data-stopflip='true'
@@ -233,9 +235,9 @@ export default async function PublicProfilePage({ params }: Props) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className='grid grid-cols-[96px_1fr] items-start gap-3 py-2'>
+    <div className='grid grid-cols-[96px_1fr] items-start gap-3'>
       <div className='text-gray-600 leading-6'>{label}</div>
-      <div className='font-medium text-gray-900 leading-6 min-w-0 break-words break-all'>
+      <div className='font-medium text-gray-900 leading-6 min-w-0 break-words'>
         {value}
       </div>
     </div>
