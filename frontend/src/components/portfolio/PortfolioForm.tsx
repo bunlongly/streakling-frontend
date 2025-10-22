@@ -565,10 +565,12 @@ export default function PortfolioForm({ mode, portfolioId, initial }: Props) {
                   Public:&nbsp;
                   <a
                     className='underline'
-                    href={`/portfolio/${encodeURIComponent(currentSlug)}`}
+                    href={`/profile/portfolio/${encodeURIComponent(
+                      currentSlug
+                    )}`}
                     target='_blank'
                   >
-                    /portfolio/{currentSlug}
+                    /profile/portfolio/{currentSlug}
                   </a>
                 </>
               )}
