@@ -10,6 +10,9 @@ import BackToTop from '@/components/BackToTop';
 import Footer from '@/components/Footer';
 import IntroSplash from '@/components/IntroSplash';
 
+import { readServerConsent } from '@/lib/consent-server';
+import CookieBanner from '@/components/cookie/CookieBanner';
+
 export const metadata: Metadata = {
   title: 'Streakling',
   description: 'Creator profiles'
@@ -22,15 +25,27 @@ const montserrat = Montserrat({
   weight: ['400', '500', '600', '700']
 });
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+// ✅ make server component async so we can await cookies()
+export default async function RootLayout({
+  children
+}: {
+  children: ReactNode;
+}) {
+  const consent = await readServerConsent();
+
   return (
     <html lang='en'>
       <body className={montserrat.variable}>
+        {/* Example: conditionally load scripts server-side */}
+        {/* {consent.analytics && (
+          <Script defer data-domain="streakling.com" src="https://plausible.io/js/script.js" />
+        )} */}
+        {/* {consent.marketing && ( ... )} */}
+
         <ClientProviders>
           <div className='app-shell min-h-dvh flex flex-col'>
             {/* ⬇️ Intro splash overlays the app on each refresh */}
             <IntroSplash
-            // Optional tweaks:
             // src="/intro.mp4"
             // poster="/hero-poster.jpg"
             // logoSrc="/logo.png"
@@ -43,6 +58,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Footer />
             <BackToTop />
           </div>
+
+          {/* Client banner mounts once and sets the cookie */}
+         <CookieBanner delayMs={5000} />
         </ClientProviders>
       </body>
     </html>
